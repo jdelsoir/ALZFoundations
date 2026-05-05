@@ -358,6 +358,111 @@
     pointer-events: none;
   }
   .empty-hint .big { font-size: 18px; font-weight: 600; }
+
+  /* Command palette */
+  .cmd-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 500;
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 14vh;
+  }
+  .cmd-overlay.open { display: flex; }
+  .cmd-palette {
+    width: min(580px, 92vw);
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0,0,0,.18);
+  }
+  .cmd-palette input {
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 12px 14px;
+    font: inherit;
+    font-size: 14px;
+    outline: none;
+  }
+  .cmd-list {
+    max-height: 360px;
+    overflow: auto;
+    padding: 4px;
+  }
+  .cmd-section {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 8px 12px 4px;
+    letter-spacing: .04em;
+    font-weight: 600;
+  }
+  .cmd-item {
+    padding: 7px 10px;
+    cursor: pointer;
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+  }
+  .cmd-item:hover, .cmd-item.active { background: #eef6fc; }
+  .cmd-item .icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+  }
+  .cmd-item .icon.mg { color: var(--azure-blue); background: #eef6fc; }
+  .cmd-item .icon.sub { color: #b58400; background: var(--sub-card); }
+  .cmd-item .icon.action { color: var(--muted); background: #f3f2f1; }
+  .cmd-item .label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cmd-item .crumbs {
+    color: var(--muted);
+    font-size: 11px;
+    margin-left: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 200px;
+  }
+  .cmd-item .kind {
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    background: #f3f2f1;
+    padding: 1px 6px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .cmd-item mark { background: #fff4ce; color: inherit; padding: 0 1px; border-radius: 2px; }
+  .cmd-empty { padding: 18px; color: var(--muted); text-align: center; font-size: 13px; }
+  .cmd-hint {
+    padding: 6px 12px;
+    font-size: 11px;
+    color: var(--muted);
+    background: #faf9f8;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 12px;
+  }
+  .cmd-hint kbd {
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 10px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 1px 4px;
+    background: #fff;
+  }
 </style>
 </head>
 <body>
@@ -368,6 +473,7 @@
   <button class="btn" id="btn-new-mg">+ Management group</button>
   <button class="btn" id="btn-new-sub">+ Subscription</button>
   <button class="btn" id="btn-undo" title="Ctrl/Cmd+Z">Undo</button>
+  <button class="btn" id="btn-cmd" title="Command palette (Ctrl/Cmd+K)">⌘K</button>
   <div class="spacer"></div>
   <label style="display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;">
     Library
@@ -386,6 +492,7 @@
       <button data-export="terraform">Terraform</button>
       <button data-export="mermaid">Mermaid + outline</button>
       <button data-export="alz-arch">ALZ architecture definition</button>
+      <button data-export="avm-placement">AVM subs placement (HCL)</button>
     </div>
   </div>
   <button class="btn" id="btn-import">Import JSON</button>
@@ -461,9 +568,21 @@
       <button class="btn" id="modal-copy">Copy</button>
       <button class="btn primary" id="modal-download">Download</button>
       <button class="btn" id="modal-browse" style="display:none">Browse…</button>
-      <input type="file" id="modal-file-input" accept=".json,application/json" style="display:none" />
+      <input type="file" id="modal-file-input" accept=".json,.tf,.hcl,.tfvars,application/json,text/plain" style="display:none" />
       <button class="btn primary" id="modal-import-confirm" style="display:none">Import</button>
     </footer>
+  </div>
+</div>
+
+<div class="cmd-overlay" id="cmd-overlay">
+  <div class="cmd-palette">
+    <input id="cmd-input" placeholder="Search nodes or run a command…" autocomplete="off" />
+    <div class="cmd-list" id="cmd-list"></div>
+    <div class="cmd-hint">
+      <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+      <span><kbd>↵</kbd> run</span>
+      <span><kbd>Esc</kbd> close</span>
+    </div>
   </div>
 </div>
 
@@ -1316,11 +1435,11 @@ dd.querySelectorAll('button[data-export]').forEach(btn => {
 
 document.getElementById('btn-import').onclick = openImportDialog;
 
-// Click on empty canvas background → deselect
+// Click on empty canvas background → deselect + close side panel
 els.canvasWrap.addEventListener('click', (e) => {
   if (e.target === els.canvasWrap || e.target === els.canvas) {
     selectedId = null;
-    render();
+    closeSidePanel();
   }
 });
 
@@ -1345,6 +1464,13 @@ document.addEventListener('keydown', (e) => {
   // Don't intercept while typing in inputs/textareas
   const t = document.activeElement?.tagName;
   const inField = t === 'INPUT' || t === 'TEXTAREA' || document.activeElement?.isContentEditable;
+
+  // Ctrl/Cmd+K — command palette (works even from fields)
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    openCommandPalette();
+    return;
+  }
 
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !inField) {
     e.preventDefault();
@@ -1389,8 +1515,232 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeSidePanel();
     closeModal();
+    closeCommandPalette();
     selectedId = null;
     render();
+  }
+});
+
+// =====================================================================
+// Command palette
+// =====================================================================
+
+const cmdOverlay = document.getElementById('cmd-overlay');
+const cmdInput = document.getElementById('cmd-input');
+const cmdList = document.getElementById('cmd-list');
+let cmdActiveIdx = 0;
+let cmdResults = [];
+
+document.getElementById('btn-cmd').onclick = openCommandPalette;
+
+function buildCommandItems() {
+  const actions = [
+    { id: 'a:load-ref', kind: 'action', label: 'Load reference architecture',
+      run: loadReferenceArchitecture },
+    { id: 'a:new-mg', kind: 'action', label: 'New management group…',
+      run: () => document.getElementById('btn-new-mg').click() },
+    { id: 'a:new-sub', kind: 'action', label: 'New subscription (pool)…',
+      run: () => document.getElementById('btn-new-sub').click() },
+    { id: 'a:undo', kind: 'action', label: 'Undo last action', run: undo },
+    { id: 'a:clear', kind: 'action', label: 'Clear hierarchy',
+      run: () => document.getElementById('btn-clear').click() },
+    { id: 'a:import', kind: 'action', label: 'Import JSON…', run: openImportDialog },
+    { id: 'a:export-svg', kind: 'action', label: 'Export — SVG diagram', run: () => runExport('svg') },
+    { id: 'a:export-png', kind: 'action', label: 'Export — PNG diagram', run: () => runExport('png') },
+    { id: 'a:export-json', kind: 'action', label: 'Export — JSON model', run: () => runExport('json') },
+    { id: 'a:export-bicep', kind: 'action', label: 'Export — Bicep', run: () => runExport('bicep') },
+    { id: 'a:export-tf', kind: 'action', label: 'Export — Terraform', run: () => runExport('terraform') },
+    { id: 'a:export-mermaid', kind: 'action', label: 'Export — Mermaid + outline', run: () => runExport('mermaid') },
+    { id: 'a:export-alz', kind: 'action', label: 'Export — ALZ architecture definition', run: () => runExport('alz-arch') },
+    { id: 'a:export-avm', kind: 'action', label: 'Export — AVM subs placement (HCL)', run: () => runExport('avm-placement') },
+  ];
+
+  const nodes = [];
+  function visit(n, crumbs) {
+    if (n.type !== TYPE.ROOT) {
+      nodes.push({
+        id: 'n:' + n.id,
+        kind: n.type === TYPE.SUB ? 'sub' : 'mg',
+        label: n.name,
+        crumbs: crumbs.join(' › '),
+        run: () => {
+          selectedId = n.id;
+          openSidePanel(n.id);
+          // scroll into view if MG/sub card present
+          const el = document.querySelector(`.node[data-id="${CSS.escape(n.id)}"]`);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+        },
+      });
+    }
+    for (const c of (n.children || [])) {
+      visit(c, n.type === TYPE.ROOT ? crumbs : [...crumbs, n.name]);
+    }
+  }
+  visit(state.root, []);
+  for (const s of state.pool) {
+    nodes.push({
+      id: 'n:' + s.id,
+      kind: 'sub',
+      label: s.name,
+      crumbs: 'unplaced pool',
+      run: () => openSidePanel(s.id),
+    });
+  }
+  return { actions, nodes };
+}
+
+// Subsequence fuzzy match: positions of matched chars + score
+function fuzzyScore(query, text) {
+  if (!query) return { score: 0, hits: [] };
+  const q = query.toLowerCase();
+  const t = text.toLowerCase();
+  let qi = 0, score = 0, prev = -2;
+  const hits = [];
+  // bonus for exact substring
+  const sub = t.indexOf(q);
+  if (sub !== -1) {
+    return {
+      score: 1000 - sub - (text.length - q.length) * 0.1,
+      hits: Array.from({ length: q.length }, (_, i) => sub + i),
+    };
+  }
+  for (let i = 0; i < t.length && qi < q.length; i++) {
+    if (t[i] === q[qi]) {
+      hits.push(i);
+      score += (i === prev + 1) ? 5 : 1;
+      if (i === 0 || /\s/.test(t[i - 1])) score += 3; // word-boundary bonus
+      prev = i;
+      qi++;
+    }
+  }
+  if (qi < q.length) return { score: -1, hits: [] };
+  score -= text.length * 0.05;
+  return { score, hits };
+}
+
+function highlight(text, hits) {
+  if (!hits || !hits.length) return escapeHtml(text);
+  const set = new Set(hits);
+  let out = '';
+  for (let i = 0; i < text.length; i++) {
+    const ch = escapeHtml(text[i]);
+    out += set.has(i) ? `<mark>${ch}</mark>` : ch;
+  }
+  return out;
+}
+
+function iconFor(kind) {
+  if (kind === 'mg') return `<span class="icon mg" title="Management group">${mgGlyph()}</span>`;
+  if (kind === 'sub') return `<span class="icon sub" title="Subscription">${subGlyph()}</span>`;
+  return `<span class="icon action" title="Action">⚡</span>`;
+}
+
+function renderCmdList() {
+  const q = cmdInput.value.trim();
+  const { actions, nodes } = buildCommandItems();
+  let scored;
+  if (!q) {
+    scored = [
+      ...nodes.map(c => ({ c, score: 0, hits: [] })),
+      ...actions.map(c => ({ c, score: 0, hits: [] })),
+    ];
+  } else {
+    scored = [...actions, ...nodes]
+      .map(c => {
+        const r = fuzzyScore(q, c.label);
+        // also check crumbs (path) for nodes — boost slightly
+        if (r.score < 0 && c.crumbs) {
+          const r2 = fuzzyScore(q, c.crumbs);
+          if (r2.score >= 0) return { c, score: r2.score - 5, hits: [] };
+        }
+        return { c, score: r.score, hits: r.hits };
+      })
+      .filter(x => x.score >= 0)
+      .sort((a, b) => b.score - a.score);
+  }
+  cmdResults = scored.map(x => x.c);
+  cmdList.innerHTML = '';
+  if (!cmdResults.length) {
+    cmdList.innerHTML = '<div class="cmd-empty">No matches</div>';
+    return;
+  }
+  cmdActiveIdx = Math.min(cmdActiveIdx, cmdResults.length - 1);
+
+  // Group: nodes (MG + sub), then actions
+  const grouped = { mg: [], sub: [], action: [] };
+  scored.forEach(({ c, hits }) => {
+    grouped[c.kind].push({ c, hits });
+  });
+  let idx = 0;
+  function appendSection(title, items) {
+    if (!items.length) return;
+    const h = document.createElement('div');
+    h.className = 'cmd-section';
+    h.textContent = title;
+    cmdList.appendChild(h);
+    for (const { c, hits } of items) {
+      const localIdx = idx++;
+      const el = document.createElement('div');
+      el.className = 'cmd-item' + (localIdx === cmdActiveIdx ? ' active' : '');
+      el.dataset.idx = String(localIdx);
+      const labelHtml = highlight(c.label, hits);
+      const crumbHtml = c.crumbs ? `<span class="crumbs">${escapeHtml(c.crumbs)}</span>` : '';
+      const kindBadge = `<span class="kind">${c.kind}</span>`;
+      el.innerHTML = `${iconFor(c.kind)}<span class="label">${labelHtml}</span>${crumbHtml}${kindBadge}`;
+      el.addEventListener('click', () => runCmd(c));
+      el.addEventListener('mouseenter', () => {
+        cmdActiveIdx = localIdx;
+        cmdList.querySelectorAll('.cmd-item.active').forEach(x => x.classList.remove('active'));
+        el.classList.add('active');
+      });
+      cmdList.appendChild(el);
+    }
+  }
+  // Recompute the order so cmdResults indices match the rendered order
+  cmdResults = [...grouped.mg, ...grouped.sub, ...grouped.action].map(x => x.c);
+  appendSection('Management groups', grouped.mg);
+  appendSection('Subscriptions', grouped.sub);
+  appendSection('Actions', grouped.action);
+
+  // Ensure active item is visible
+  const active = cmdList.querySelector('.cmd-item.active');
+  if (active) active.scrollIntoView({ block: 'nearest' });
+}
+
+function runCmd(c) {
+  closeCommandPalette();
+  setTimeout(() => c.run(), 0);
+}
+
+function openCommandPalette() {
+  cmdActiveIdx = 0;
+  cmdInput.value = '';
+  renderCmdList();
+  cmdOverlay.classList.add('open');
+  setTimeout(() => cmdInput.focus(), 0);
+}
+function closeCommandPalette() {
+  cmdOverlay.classList.remove('open');
+}
+cmdOverlay.addEventListener('click', (e) => {
+  if (e.target === cmdOverlay) closeCommandPalette();
+});
+cmdInput.addEventListener('input', () => { cmdActiveIdx = 0; renderCmdList(); });
+cmdInput.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown') {
+    cmdActiveIdx = Math.min(cmdActiveIdx + 1, cmdResults.length - 1);
+    renderCmdList();
+    e.preventDefault();
+  } else if (e.key === 'ArrowUp') {
+    cmdActiveIdx = Math.max(cmdActiveIdx - 1, 0);
+    renderCmdList();
+    e.preventDefault();
+  } else if (e.key === 'Enter') {
+    if (cmdResults[cmdActiveIdx]) runCmd(cmdResults[cmdActiveIdx]);
+    e.preventDefault();
+  } else if (e.key === 'Escape') {
+    closeCommandPalette();
+    e.preventDefault();
   }
 });
 
@@ -1407,6 +1757,7 @@ function runExport(kind) {
     case 'terraform': return openModal('Terraform', toTerraform(), 'alz-foundations.tf');
     case 'mermaid': return openModal('Mermaid + outline', toMermaidAndOutline(), 'alz-foundations.md');
     case 'alz-arch': return exportAlzArch();
+    case 'avm-placement': return exportAvmPlacement();
   }
 }
 
@@ -1454,6 +1805,100 @@ function toAlzArchDef(archName) {
     name: archName,
     management_groups: groups,
   };
+}
+
+// =====================================================================
+// AVM subs placement (HCL fragment) — import + export
+// =====================================================================
+
+function exportAvmPlacement() {
+  let placedCount = 0;
+  (function count(n) {
+    if (n.type === TYPE.SUB) placedCount++;
+    (n.children || []).forEach(count);
+  })(state.root);
+  if (placedCount === 0) {
+    toast('No placed subscriptions to export');
+    return;
+  }
+  const hcl = toAvmPlacement();
+  openModal('AVM subs placement (HCL)', hcl, 'avm-subs-placement.tf');
+}
+
+function toAvmPlacement() {
+  const lines = [];
+  lines.push('# AVM subscription placement — paste into your terraform.tfvars or module call.');
+  lines.push('# Each entry: <key> = { subscription_id, management_group_name }');
+  lines.push('subscription_placement = {');
+  const used = new Map();
+  function uniqueKey(name) {
+    let k = String(name).toLowerCase().replace(/[^a-z0-9_]/g, '');
+    if (!k) k = 'sub';
+    const c = (used.get(k) || 0) + 1;
+    used.set(k, c);
+    return c > 1 ? k + c : k;
+  }
+  function visit(parent) {
+    for (const c of (parent.children || [])) {
+      if (c.type === TYPE.SUB) {
+        const key = uniqueKey(c.name);
+        const subId = c.subscriptionId || '00000000-0000-0000-0000-000000000000';
+        const todo = c.subscriptionId ? '' : '  # TODO: replace with real subscription GUID';
+        lines.push(`  ${key} = {`);
+        lines.push(`    subscription_id       = "${subId}"${todo}`);
+        lines.push(`    management_group_name = "${parent.id}"`);
+        lines.push(`  }`);
+      } else {
+        visit(c);
+      }
+    }
+  }
+  visit(state.root);
+  lines.push('}');
+  if (state.pool.length) {
+    lines.push('');
+    lines.push('# Unplaced subscriptions (no management group — not emitted):');
+    for (const s of state.pool) {
+      lines.push(`#   - ${s.name}${s.subscriptionId ? ' (' + s.subscriptionId + ')' : ''}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+function parseAvmPlacement(text) {
+  const items = [];
+  const re = /(\w+)\s*=\s*\{\s*subscription_id\s*=\s*"([^"]+)"\s*management_group_name\s*=\s*"([^"]+)"\s*\}/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    items.push({ key: m[1], subscription_id: m[2], management_group_name: m[3] });
+  }
+  return items;
+}
+
+function applyAvmPlacement(items) {
+  const lookup = new Map();
+  function index(n) {
+    if (n.type === TYPE.MG) {
+      lookup.set(n.id.toLowerCase(), n);
+      lookup.set(String(n.name).toLowerCase(), n);
+    }
+    (n.children || []).forEach(index);
+  }
+  index(state.root);
+  let placed = 0, unplaced = 0;
+  for (const it of items) {
+    const target = lookup.get(it.management_group_name.toLowerCase());
+    const sub = {
+      id: makeId('sub'),
+      type: TYPE.SUB,
+      name: it.key,
+      subscriptionId: it.subscription_id,
+      children: [],
+    };
+    if (target) { target.children.push(sub); placed++; }
+    else { state.pool.push(sub); unplaced++; }
+  }
+  return { placed, unplaced };
 }
 
 function serializeState() {
@@ -1814,7 +2259,7 @@ function openImportDialog() {
   modal.content.style.display = 'none';
   modal.textarea.style.display = '';
   modal.textarea.value = '';
-  modal.textarea.placeholder = 'Paste JSON, click Browse…, or drop a .json file here.\nAuto-detects:\n  • Native JSON model (root + pool)\n  • ALZ architecture definition (management_groups[]) — avm-ptn-alz Terraform module input';
+  modal.textarea.placeholder = 'Paste content, click Browse…, or drop a file here.\nAuto-detects:\n  • Native JSON model (root + pool)\n  • ALZ architecture definition (management_groups[]) — avm-ptn-alz Terraform module input\n  • AVM subs placement HCL — subscription_placement = { … }';
   modal.copy.style.display = 'none';
   modal.download.style.display = 'none';
   modal.browse.style.display = '';
@@ -1837,8 +2282,27 @@ fileInput.addEventListener('change', async () => {
   fileInput.value = '';
 });
 modal.importBtn.onclick = () => {
+  const txt = modal.textarea.value;
+  // Detect AVM HCL placement first (not valid JSON)
+  if (/subscription_placement\s*=\s*\{/.test(txt) || /management_group_name\s*=/.test(txt)) {
+    try {
+      const items = parseAvmPlacement(txt);
+      if (!items.length) throw new Error('No subscription_placement entries matched');
+      snapshot();
+      const { placed, unplaced } = applyAvmPlacement(items);
+      save(); render();
+      const msg = unplaced
+        ? `Imported ${items.length} placements — ${placed} placed, ${unplaced} sent to pool (MG not found)`
+        : `Imported ${placed} subscription placements`;
+      toast(msg);
+      closeModal();
+    } catch (e) {
+      toast('Import failed: ' + e.message);
+    }
+    return;
+  }
   try {
-    const parsed = JSON.parse(modal.textarea.value);
+    const parsed = JSON.parse(txt);
     snapshot();
     if (Array.isArray(parsed.management_groups)) {
       state = importAlzArchDef(parsed);
