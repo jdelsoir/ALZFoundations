@@ -1,0 +1,1928 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ALZ Foundations — Hierarchy Designer</title>
+<style>
+  :root {
+    --azure-blue: #0078d4;
+    --azure-blue-dark: #005a9e;
+    --border: #d1d1d1;
+    --border-strong: #8a8886;
+    --bg: #faf9f8;
+    --band-mg: #eef6fc;
+    --band-sub: #fff8e1;
+    --sub-card: #fff4ce;
+    --shadow: 0 1.6px 3.6px rgba(0,0,0,.08), 0 .3px .9px rgba(0,0,0,.06);
+    --text: #201f1e;
+    --muted: #605e5c;
+    --danger: #a4262c;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    font-size: 14px;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    height: 100vh;
+  }
+  /* Toolbar */
+  .toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 16px;
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .toolbar h1 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 16px 0 0;
+    color: var(--azure-blue);
+  }
+  .btn {
+    border: 1px solid var(--border-strong);
+    background: #fff;
+    color: var(--text);
+    padding: 6px 14px;
+    font: inherit;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background .1s;
+  }
+  .btn:hover { background: #f3f2f1; }
+  .btn:active { background: #edebe9; }
+  .btn.primary {
+    background: var(--azure-blue);
+    color: #fff;
+    border-color: var(--azure-blue);
+  }
+  .btn.primary:hover { background: var(--azure-blue-dark); border-color: var(--azure-blue-dark); }
+  .btn.danger { color: var(--danger); border-color: var(--danger); }
+  .btn.danger:hover { background: #fde7e9; }
+  .spacer { flex: 1; }
+  .dropdown { position: relative; display: inline-block; }
+  .dropdown-menu {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    margin-top: 2px;
+    background: #fff;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    min-width: 180px;
+    z-index: 100;
+    display: none;
+  }
+  .dropdown.open .dropdown-menu { display: block; }
+  .dropdown-menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 0;
+    padding: 8px 14px;
+    font: inherit;
+    cursor: pointer;
+  }
+  .dropdown-menu button:hover { background: #f3f2f1; }
+
+  /* Main grid */
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    overflow: hidden;
+  }
+  .canvas-wrap {
+    overflow: auto;
+    position: relative;
+    background:
+      linear-gradient(#fff, #fff) 0 0/100% 100% no-repeat;
+  }
+  .canvas {
+    position: relative;
+    min-width: 100%;
+    min-height: 100%;
+    padding: 24px;
+  }
+  #connectors {
+    position: absolute;
+    left: 0; top: 0;
+    pointer-events: none;
+    overflow: visible;
+    z-index: 2;
+  }
+  /* Bands */
+  .band {
+    position: absolute;
+    border-radius: 6px;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .band.mg { background: var(--band-mg); }
+  .band.sub { background: var(--band-sub); }
+  .band-label {
+    position: absolute;
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 4px 8px;
+  }
+
+  /* Cards */
+  .node {
+    position: absolute;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    box-shadow: var(--shadow);
+    padding: 10px 12px;
+    min-width: 120px;
+    text-align: center;
+    cursor: grab;
+    user-select: none;
+    font-size: 13px;
+    transition: outline-color .1s;
+    outline: 2px solid transparent;
+    outline-offset: 1px;
+    z-index: 3;
+  }
+  .node.root { cursor: default; font-weight: 600; }
+  .node.subscription {
+    background: var(--sub-card);
+    border-color: #e6c200;
+  }
+  .node.selected { outline-color: var(--azure-blue); }
+  .node.drag-over-ok { outline-color: var(--azure-blue); outline-style: dashed; }
+  .node.drag-over-bad { outline-color: var(--danger); outline-style: dashed; cursor: not-allowed; }
+  .node:active { cursor: grabbing; }
+  .node .glyph {
+    display: inline-block;
+    margin-right: 4px;
+    color: var(--muted);
+    vertical-align: -2px;
+  }
+  .node.subscription .glyph { color: #b58400; }
+
+  /* Pool */
+  .pool {
+    border-left: 1px solid var(--border);
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .pool h2 {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .pool-list {
+    flex: 1;
+    overflow: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .pool-list.drag-over-ok { background: #eef6fc; }
+  .pool-item {
+    background: var(--sub-card);
+    border: 1px solid #e6c200;
+    border-radius: 3px;
+    padding: 8px 10px;
+    cursor: grab;
+    font-size: 13px;
+    box-shadow: var(--shadow);
+  }
+  .pool-item:active { cursor: grabbing; }
+  .pool-empty { color: var(--muted); font-size: 12px; padding: 8px; }
+  .pool-actions { padding: 10px; border-top: 1px solid var(--border); }
+  .pool-actions input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    font: inherit;
+    margin-bottom: 6px;
+  }
+
+  /* Side panel (modal) for node edit */
+  .side-panel {
+    position: fixed;
+    right: 0; top: 0; bottom: 0;
+    width: 320px;
+    background: #fff;
+    border-left: 1px solid var(--border);
+    box-shadow: -4px 0 12px rgba(0,0,0,.08);
+    transform: translateX(100%);
+    transition: transform .2s;
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+  }
+  .side-panel.open { transform: translateX(0); }
+  .side-panel header {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .side-panel header h2 { margin: 0; font-size: 15px; }
+  .side-panel .body { padding: 16px; flex: 1; overflow: auto; }
+  .side-panel .body label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .side-panel .body input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    font: inherit;
+    margin-bottom: 12px;
+  }
+  .side-panel footer {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+  .close-x {
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    font-size: 18px;
+    color: var(--muted);
+  }
+
+  /* Modal (export) */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.4);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 300;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: #fff;
+    border-radius: 4px;
+    width: min(800px, 90vw);
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 24px rgba(0,0,0,.2);
+  }
+  .modal header {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .modal header h2 { margin: 0; font-size: 15px; }
+  .modal pre {
+    margin: 0;
+    padding: 14px 18px;
+    flex: 1;
+    overflow: auto;
+    background: #f8f8f8;
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 12px;
+    white-space: pre;
+  }
+  .modal textarea {
+    margin: 0;
+    padding: 14px 18px;
+    flex: 1;
+    overflow: auto;
+    background: #f8f8f8;
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 12px;
+    border: 0;
+    resize: none;
+    outline: none;
+  }
+  .modal footer {
+    padding: 12px 18px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #323130;
+    color: #fff;
+    padding: 8px 16px;
+    border-radius: 2px;
+    font-size: 13px;
+    opacity: 0;
+    transition: opacity .2s;
+    z-index: 400;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+
+  /* Empty-state hint */
+  .empty-hint {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 12px;
+    color: var(--muted);
+    text-align: center;
+    pointer-events: none;
+  }
+  .empty-hint .big { font-size: 18px; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <h1>ALZ Foundations</h1>
+  <button class="btn primary" id="btn-load-ref">Load reference architecture</button>
+  <button class="btn" id="btn-new-mg">+ Management group</button>
+  <button class="btn" id="btn-new-sub">+ Subscription</button>
+  <button class="btn" id="btn-undo" title="Ctrl/Cmd+Z">Undo</button>
+  <div class="spacer"></div>
+  <label style="display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;">
+    Library
+    <select id="alz-tag-select" style="padding:5px 6px;border:1px solid var(--border);border-radius:2px;font:inherit;min-width:200px;">
+      <option value="">Loading…</option>
+    </select>
+    <button class="btn" id="btn-refresh-tags" title="Refresh from GitHub" style="padding:4px 8px;">↻</button>
+  </label>
+  <div class="dropdown" id="export-dd">
+    <button class="btn primary" id="btn-export">Export ▾</button>
+    <div class="dropdown-menu">
+      <button data-export="svg">SVG diagram</button>
+      <button data-export="png">PNG diagram</button>
+      <button data-export="json">JSON model</button>
+      <button data-export="bicep">Bicep</button>
+      <button data-export="terraform">Terraform</button>
+      <button data-export="mermaid">Mermaid + outline</button>
+      <button data-export="alz-arch">ALZ architecture definition</button>
+    </div>
+  </div>
+  <button class="btn" id="btn-import">Import JSON</button>
+  <button class="btn danger" id="btn-clear">Clear</button>
+</div>
+
+<div class="main">
+  <div class="canvas-wrap" id="canvas-wrap">
+    <div class="canvas" id="canvas">
+      <svg id="connectors"></svg>
+      <!-- bands and nodes injected here -->
+    </div>
+    <div class="empty-hint" id="empty-hint">
+      <div class="big">Empty hierarchy</div>
+      <div>Click <b>Load reference architecture</b> to seed the canonical ALZ tree,</div>
+      <div>or <b>+ Management group</b> to start from scratch.</div>
+    </div>
+  </div>
+  <aside class="pool">
+    <h2>Unplaced subscriptions</h2>
+    <div class="pool-list" id="pool-list"></div>
+    <div class="pool-actions">
+      <input id="new-sub-name" placeholder="New subscription name…" />
+      <button class="btn" id="btn-add-sub-pool" style="width:100%">+ Add to pool</button>
+    </div>
+  </aside>
+</div>
+
+<aside class="side-panel" id="side-panel">
+  <header>
+    <h2 id="sp-title">Edit node</h2>
+    <button class="close-x" id="sp-close">×</button>
+  </header>
+  <div class="body">
+    <label>Display name</label>
+    <input id="sp-name" />
+    <label>ID (slug, used in IaC)</label>
+    <input id="sp-id" />
+    <div id="sp-sub-fields">
+      <label>Azure Subscription ID (optional UUID)</label>
+      <input id="sp-subid" placeholder="00000000-0000-0000-0000-000000000000" />
+    </div>
+    <div id="sp-mg-fields">
+      <label>Archetype <span id="sp-archetype-status" style="font-weight:400;color:var(--muted);"></span></label>
+      <select id="sp-archetype" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:2px;font:inherit;margin-bottom:6px;">
+        <option value="">(none)</option>
+      </select>
+      <input id="sp-archetype-fallback" placeholder="Type archetype manually (offline fallback)…" style="display:none;" />
+      <div style="margin-top:8px;"></div>
+      <label style="display:flex;align-items:center;gap:6px;font-weight:400;">
+        <input type="checkbox" id="sp-exists" style="width:auto;margin:0;" />
+        <span>Already exists in Azure (<code>exists: true</code>)</span>
+      </label>
+    </div>
+  </div>
+  <footer>
+    <button class="btn danger" id="sp-delete">Delete</button>
+    <div class="spacer"></div>
+    <button class="btn" id="sp-cancel">Cancel</button>
+    <button class="btn primary" id="sp-save">Save</button>
+  </footer>
+</aside>
+
+<div class="modal-backdrop" id="modal-backdrop">
+  <div class="modal" id="modal">
+    <header>
+      <h2 id="modal-title">Export</h2>
+      <button class="close-x" id="modal-close">×</button>
+    </header>
+    <pre id="modal-content"></pre>
+    <textarea id="modal-textarea" style="display:none"></textarea>
+    <footer>
+      <button class="btn" id="modal-copy">Copy</button>
+      <button class="btn primary" id="modal-download">Download</button>
+      <button class="btn" id="modal-browse" style="display:none">Browse…</button>
+      <input type="file" id="modal-file-input" accept=".json,application/json" style="display:none" />
+      <button class="btn primary" id="modal-import-confirm" style="display:none">Import</button>
+    </footer>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+'use strict';
+
+// =====================================================================
+// State
+// =====================================================================
+
+const STORAGE_KEY = 'alz-foundations:state';
+
+const TYPE = { ROOT: 'root', MG: 'mg', SUB: 'subscription' };
+
+function makeId(prefix) {
+  return prefix + '-' + Math.random().toString(36).slice(2, 8);
+}
+function slugify(s) {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'node';
+}
+
+function makeRoot() {
+  return { id: 'tenant-root', type: TYPE.ROOT, name: 'Tenant root group', children: [] };
+}
+
+let state = {
+  root: makeRoot(),
+  pool: [],
+  meta: { orgName: 'Contoso' },
+};
+let undoStack = [];
+let selectedId = null;
+
+// =====================================================================
+// Tree helpers (pure)
+// =====================================================================
+
+function findNode(root, id, path = []) {
+  if (root.id === id) return { node: root, parent: null, path };
+  for (const child of (root.children || [])) {
+    const r = findNode(child, id, [...path, root]);
+    if (r) {
+      if (r.parent === null) r.parent = root;
+      return r;
+    }
+  }
+  return null;
+}
+function isDescendant(ancestor, candidateId) {
+  if (ancestor.id === candidateId) return true;
+  return (ancestor.children || []).some(c => isDescendant(c, candidateId));
+}
+function allIds(root, out = new Set()) {
+  out.add(root.id);
+  for (const c of (root.children || [])) allIds(c, out);
+  return out;
+}
+function uniqueId(root, base) {
+  const ids = allIds(root);
+  let id = base;
+  let n = 2;
+  while (ids.has(id)) { id = base + '-' + n; n++; }
+  return id;
+}
+
+// =====================================================================
+// Mutations (snapshot for undo, then save)
+// =====================================================================
+
+function snapshot() {
+  undoStack.push(JSON.stringify(state));
+  if (undoStack.length > 50) undoStack.shift();
+}
+function undo() {
+  const prev = undoStack.pop();
+  if (!prev) { toast('Nothing to undo'); return; }
+  state = JSON.parse(prev);
+  selectedId = null;
+  render();
+  save();
+}
+
+function addMg(parentId, name) {
+  const parent = findNode(state.root, parentId);
+  if (!parent || parent.node.type === TYPE.SUB) return;
+  snapshot();
+  const id = uniqueId(state.root, 'mg-' + slugify(name));
+  parent.node.children.push({ id, type: TYPE.MG, name, children: [] });
+  save(); render();
+}
+
+function addSubToPool(name) {
+  snapshot();
+  state.pool.push({ id: makeId('sub'), type: TYPE.SUB, name, subscriptionId: null, children: [] });
+  save(); render();
+}
+
+function placeSubscription(subId, targetMgId) {
+  const idx = state.pool.findIndex(s => s.id === subId);
+  if (idx < 0) return;
+  const target = findNode(state.root, targetMgId);
+  if (!target || target.node.type === TYPE.SUB) return;
+  snapshot();
+  const [sub] = state.pool.splice(idx, 1);
+  target.node.children.push(sub);
+  save(); render();
+}
+
+function moveNode(nodeId, targetMgId) {
+  if (nodeId === targetMgId) return;
+  const found = findNode(state.root, nodeId);
+  if (!found || !found.parent) return;
+  if (isDescendant(found.node, targetMgId)) return;
+  const target = findNode(state.root, targetMgId);
+  if (!target || target.node.type === TYPE.SUB) return;
+  snapshot();
+  const arr = found.parent.children;
+  const idx = arr.findIndex(c => c.id === nodeId);
+  arr.splice(idx, 1);
+  target.node.children.push(found.node);
+  save(); render();
+}
+
+function unplaceSubscription(subId) {
+  const found = findNode(state.root, subId);
+  if (!found || found.node.type !== TYPE.SUB || !found.parent) return;
+  snapshot();
+  const arr = found.parent.children;
+  arr.splice(arr.findIndex(c => c.id === subId), 1);
+  state.pool.push(found.node);
+  save(); render();
+}
+
+function deleteNode(id) {
+  if (id === state.root.id) return;
+  const found = findNode(state.root, id);
+  if (found) {
+    snapshot();
+    const arr = found.parent.children;
+    arr.splice(arr.findIndex(c => c.id === id), 1);
+    save(); render();
+    return;
+  }
+  const idx = state.pool.findIndex(s => s.id === id);
+  if (idx >= 0) {
+    snapshot();
+    state.pool.splice(idx, 1);
+    save(); render();
+  }
+}
+
+function updateNode(id, patch) {
+  const found = findNode(state.root, id);
+  let node = found?.node;
+  if (!node) node = state.pool.find(s => s.id === id);
+  if (!node) return;
+  snapshot();
+  Object.assign(node, patch);
+  save(); render();
+}
+
+// =====================================================================
+// Persistence
+// =====================================================================
+
+let saveTimer = null;
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+  }, 200);
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    if (!parsed.root) return false;
+    state = parsed;
+    if (!state.pool) state.pool = [];
+    if (!state.meta) state.meta = { orgName: 'Contoso' };
+    return true;
+  } catch { return false; }
+}
+
+// =====================================================================
+// Reference architecture
+// =====================================================================
+
+function loadReferenceArchitecture() {
+  if (state.root.children.length || state.pool.length) {
+    if (!confirm('This will replace the current hierarchy. Continue?')) return;
+  }
+  snapshot();
+  const mg = (id, name, archetypes, children = []) => ({
+    id, type: TYPE.MG, name, archetypes: archetypes || [], exists: false, children
+  });
+  const sub = (name) => ({ id: makeId('sub'), type: TYPE.SUB, name, subscriptionId: null, children: [] });
+  const org = mg('Contoso', state.meta.orgName || 'Contoso', ['root'], [
+    mg('Platform', 'Platform', ['platform'], [
+      mg('Security', 'Security', [], [sub('Security subscription')]),
+      mg('Management', 'Management', ['management'], [sub('Management subscription')]),
+      mg('Identity', 'Identity', ['identity'], [sub('Identity subscription')]),
+      mg('Connectivity', 'Connectivity', ['connectivity_override'], [sub('Connectivity subscription')]),
+    ]),
+    mg('LandingZones', 'Landing zones', ['landing_zones_override'], [
+      mg('Corp', 'Corp', ['corp'], [
+        sub('Landing zone A1 subscription'),
+        sub('Landing zone P1 subscription'),
+        sub('Landing zone A2 subscription'),
+      ]),
+      mg('Online', 'Online', ['online']),
+      mg('Local', 'Local', ['corp'], [
+        sub('Landing zone LC1 subscription (Azure Local Clusters)'),
+        sub('Landing zone LA1 subscription (Applications)'),
+      ]),
+    ]),
+    mg('Decommissioned', 'Decommissioned', ['decommissioned'], [sub('Decommissioned subscription')]),
+    mg('Sandbox', 'Sandbox', ['sandbox'], [
+      sub('Sandbox subscription 1'),
+      sub('Sandbox subscription 2'),
+    ]),
+  ]);
+  state.root = makeRoot();
+  state.root.children.push(org);
+  state.pool = [];
+  save(); render();
+}
+
+// =====================================================================
+// Tidy-tree layout (Reingold–Tilford simplified)
+// =====================================================================
+
+const NODE_W = 180;
+const NODE_H = 44;
+const H_GAP = 18;
+const V_GAP = 56;
+const PAD = 24;
+
+function layout(root) {
+  // First pass: assign x relative to subtree
+  function first(node) {
+    const kids = node.children || [];
+    if (!kids.length) {
+      node._w = NODE_W;
+      return;
+    }
+    let total = 0;
+    kids.forEach(first);
+    kids.forEach((k, i) => {
+      total += k._w;
+      if (i > 0) total += H_GAP;
+    });
+    node._w = Math.max(NODE_W, total);
+  }
+  // Pre-compute deepest MG depth so all subs share one bottom row
+  let maxMgDepth = 0;
+  (function scan(n, d) {
+    if (n.type !== TYPE.SUB) maxMgDepth = Math.max(maxMgDepth, d);
+    (n.children || []).forEach(c => scan(c, d + 1));
+  })(root, 0);
+  const subRowY = (maxMgDepth + 1) * (NODE_H + V_GAP);
+
+  // Second pass: assign absolute x,y
+  function place(node, x, y) {
+    node._y = node.type === TYPE.SUB ? subRowY : y;
+    const kids = node.children || [];
+    if (!kids.length) {
+      node._x = x + (node._w - NODE_W) / 2;
+      return;
+    }
+    let cursor = x;
+    let total = 0;
+    kids.forEach((k, i) => {
+      total += k._w;
+      if (i > 0) total += H_GAP;
+    });
+    cursor = x + (node._w - total) / 2;
+    for (const k of kids) {
+      place(k, cursor, y + NODE_H + V_GAP);
+      cursor += k._w + H_GAP;
+    }
+    // center node above its kids
+    const firstKid = kids[0], lastKid = kids[kids.length - 1];
+    const mid = (firstKid._x + lastKid._x + NODE_W) / 2;
+    node._x = mid - NODE_W / 2;
+  }
+  first(root);
+  place(root, 0, 0);
+  // Collect bbox
+  let maxX = 0, maxY = 0;
+  function visit(n) {
+    maxX = Math.max(maxX, n._x + NODE_W);
+    maxY = Math.max(maxY, n._y + NODE_H);
+    (n.children || []).forEach(visit);
+  }
+  visit(root);
+  return { width: maxX, height: maxY };
+}
+
+// =====================================================================
+// Render
+// =====================================================================
+
+const els = {
+  canvas: document.getElementById('canvas'),
+  canvasWrap: document.getElementById('canvas-wrap'),
+  connectors: document.getElementById('connectors'),
+  poolList: document.getElementById('pool-list'),
+  emptyHint: document.getElementById('empty-hint'),
+};
+
+function render() {
+  // Clear (keep <svg id=connectors>)
+  for (const child of [...els.canvas.children]) {
+    if (child.id !== 'connectors') child.remove();
+  }
+  els.connectors.innerHTML = '';
+
+  const hasContent = state.root.children.length > 0;
+  els.emptyHint.style.display = hasContent ? 'none' : 'flex';
+
+  if (hasContent) {
+    const { width, height } = layout(state.root);
+    els.canvas.style.width = (width + PAD * 2) + 'px';
+    els.canvas.style.height = (height + PAD * 2 + 40) + 'px';
+    els.connectors.setAttribute('width', width + PAD * 2);
+    els.connectors.setAttribute('height', height + PAD * 2 + 40);
+
+    // Bands: compute MG-band (covers all MG levels) and SUB-band (just subscriptions)
+    const mgBox = bbox(state.root, n => n.type !== TYPE.SUB);
+    const subBox = bbox(state.root, n => n.type === TYPE.SUB);
+    // Skip Tenant root from MG band
+    const mgChildBox = (() => {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      function visit(n, depth) {
+        if (depth >= 1 && n.type === TYPE.MG) {
+          x0 = Math.min(x0, n._x); y0 = Math.min(y0, n._y);
+          x1 = Math.max(x1, n._x + NODE_W); y1 = Math.max(y1, n._y + NODE_H);
+        }
+        (n.children || []).forEach(c => visit(c, depth + 1));
+      }
+      visit(state.root, 0);
+      return isFinite(x0) ? { x0, y0, x1, y1 } : null;
+    })();
+    if (mgChildBox) {
+      const band = document.createElement('div');
+      band.className = 'band mg';
+      band.style.left = (mgChildBox.x0 - 12 + PAD) + 'px';
+      band.style.top = (mgChildBox.y0 - 24 + PAD) + 'px';
+      band.style.width = (mgChildBox.x1 - mgChildBox.x0 + 24) + 'px';
+      band.style.height = (mgChildBox.y1 - mgChildBox.y0 + 36) + 'px';
+      els.canvas.appendChild(band);
+      const lbl = document.createElement('div');
+      lbl.className = 'band-label';
+      lbl.textContent = 'Management groups';
+      lbl.style.left = (mgChildBox.x0 - 12 + PAD) + 'px';
+      lbl.style.top = (mgChildBox.y0 - 44 + PAD) + 'px';
+      els.canvas.appendChild(lbl);
+    }
+    if (subBox) {
+      const band = document.createElement('div');
+      band.className = 'band sub';
+      band.style.left = (subBox.x0 - 12 + PAD) + 'px';
+      band.style.top = (subBox.y0 - 8 + PAD) + 'px';
+      band.style.width = (subBox.x1 - subBox.x0 + 24) + 'px';
+      band.style.height = (subBox.y1 - subBox.y0 + 16) + 'px';
+      els.canvas.appendChild(band);
+      const lbl = document.createElement('div');
+      lbl.className = 'band-label';
+      lbl.textContent = 'Subscriptions';
+      lbl.style.left = (subBox.x0 - 12 + PAD) + 'px';
+      lbl.style.top = (subBox.y1 + 8 + PAD) + 'px';
+      els.canvas.appendChild(lbl);
+    }
+
+    // Connectors
+    drawConnectors(state.root);
+
+    // Cards
+    renderNode(state.root);
+  } else {
+    els.canvas.style.width = '100%';
+    els.canvas.style.height = '100%';
+  }
+
+  // Pool
+  els.poolList.innerHTML = '';
+  if (!state.pool.length) {
+    const empty = document.createElement('div');
+    empty.className = 'pool-empty';
+    empty.textContent = 'No unplaced subscriptions. Drag subscription cards here to un-place.';
+    els.poolList.appendChild(empty);
+  }
+  for (const sub of state.pool) {
+    const item = document.createElement('div');
+    item.className = 'pool-item';
+    item.draggable = true;
+    item.dataset.id = sub.id;
+    item.dataset.kind = 'pool-sub';
+    item.innerHTML = subGlyph() + escapeHtml(sub.name);
+    item.addEventListener('dragstart', onDragStart);
+    item.addEventListener('dragend', onDragEnd);
+    item.addEventListener('click', () => openSidePanel(sub.id));
+    els.poolList.appendChild(item);
+  }
+}
+
+function bbox(root, predicate) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  function visit(n) {
+    if (predicate(n)) {
+      x0 = Math.min(x0, n._x); y0 = Math.min(y0, n._y);
+      x1 = Math.max(x1, n._x + NODE_W); y1 = Math.max(y1, n._y + NODE_H);
+    }
+    (n.children || []).forEach(visit);
+  }
+  visit(root);
+  return isFinite(x0) ? { x0, y0, x1, y1 } : null;
+}
+
+function renderNode(node) {
+  const el = document.createElement('div');
+  el.className = 'node ' + node.type;
+  if (node.id === selectedId) el.classList.add('selected');
+  el.style.left = (node._x + PAD) + 'px';
+  el.style.top = (node._y + PAD) + 'px';
+  el.style.width = NODE_W + 'px';
+  el.dataset.id = node.id;
+  el.dataset.kind = node.type === TYPE.SUB ? 'tree-sub' : (node.type === TYPE.ROOT ? 'root' : 'mg');
+  el.draggable = node.type !== TYPE.ROOT;
+
+  const glyph = node.type === TYPE.SUB ? subGlyph() : mgGlyph();
+  el.innerHTML = glyph + escapeHtml(node.name);
+
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (node.type !== TYPE.ROOT) openSidePanel(node.id);
+  });
+  el.addEventListener('dragstart', onDragStart);
+  el.addEventListener('dragend', onDragEnd);
+  if (node.type !== TYPE.SUB) {
+    el.addEventListener('dragover', onDragOverMg);
+    el.addEventListener('dragleave', onDragLeave);
+    el.addEventListener('drop', onDropMg);
+  }
+
+  els.canvas.appendChild(el);
+  for (const c of (node.children || [])) renderNode(c);
+}
+
+function drawConnectors(node) {
+  const NS = 'http://www.w3.org/2000/svg';
+  for (const c of (node.children || [])) {
+    const x1 = node._x + NODE_W / 2 + PAD;
+    const y1 = node._y + NODE_H + PAD;
+    const x2 = c._x + NODE_W / 2 + PAD;
+    const y2 = c._y + PAD;
+    const ym = y1 + (y2 - y1) / 2;
+    const path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', `M ${x1} ${y1} L ${x1} ${ym} L ${x2} ${ym} L ${x2} ${y2}`);
+    path.setAttribute('stroke', '#8a8886');
+    path.setAttribute('stroke-width', '1');
+    path.setAttribute('fill', 'none');
+    els.connectors.appendChild(path);
+    drawConnectors(c);
+  }
+}
+
+function mgGlyph() {
+  return `<svg class="glyph" width="14" height="14" viewBox="0 0 16 16" fill="none">
+    <rect x="2" y="3" width="12" height="10" rx="1" stroke="currentColor" stroke-width="1.2"/>
+    <line x1="2" y1="6" x2="14" y2="6" stroke="currentColor" stroke-width="1.2"/>
+  </svg>`;
+}
+function subGlyph() {
+  // Tiny key icon, matches Azure portal subscription badge
+  return `<svg class="glyph" width="14" height="14" viewBox="0 0 16 16" fill="none">
+    <circle cx="5" cy="8" r="2.5" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M7.5 8 L14 8 L14 10 L12.5 10 L12.5 11.5 L11 11.5 L11 10 L9 10" stroke="currentColor" stroke-width="1.2" fill="none"/>
+  </svg>`;
+}
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// =====================================================================
+// Drag & drop
+// =====================================================================
+
+let dragInfo = null; // { id, kind }
+
+function onDragStart(e) {
+  const el = e.currentTarget;
+  dragInfo = { id: el.dataset.id, kind: el.dataset.kind };
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', el.dataset.id);
+}
+function onDragEnd() {
+  dragInfo = null;
+  document.querySelectorAll('.drag-over-ok, .drag-over-bad').forEach(el => {
+    el.classList.remove('drag-over-ok', 'drag-over-bad');
+  });
+}
+function onDragOverMg(e) {
+  if (!dragInfo) return;
+  const targetEl = e.currentTarget;
+  const targetId = targetEl.dataset.id;
+  let ok = false;
+  if (dragInfo.kind === 'pool-sub') ok = true;
+  else if (dragInfo.kind === 'tree-sub') ok = true;
+  else if (dragInfo.kind === 'mg') {
+    const found = findNode(state.root, dragInfo.id);
+    ok = !!found && !isDescendant(found.node, targetId) && dragInfo.id !== targetId;
+  } else if (dragInfo.kind === 'root') {
+    ok = false;
+  }
+  e.preventDefault();
+  e.dataTransfer.dropEffect = ok ? 'move' : 'none';
+  targetEl.classList.toggle('drag-over-ok', ok);
+  targetEl.classList.toggle('drag-over-bad', !ok);
+}
+function onDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over-ok', 'drag-over-bad');
+}
+function onDropMg(e) {
+  e.preventDefault();
+  const targetEl = e.currentTarget;
+  targetEl.classList.remove('drag-over-ok', 'drag-over-bad');
+  if (!dragInfo) return;
+  const targetId = targetEl.dataset.id;
+  if (dragInfo.kind === 'pool-sub') placeSubscription(dragInfo.id, targetId);
+  else if (dragInfo.kind === 'tree-sub' || dragInfo.kind === 'mg') moveNode(dragInfo.id, targetId);
+}
+
+// Pool drop target (un-place)
+els.poolList.addEventListener('dragover', (e) => {
+  if (!dragInfo || dragInfo.kind !== 'tree-sub') return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  els.poolList.classList.add('drag-over-ok');
+});
+els.poolList.addEventListener('dragleave', () => els.poolList.classList.remove('drag-over-ok'));
+els.poolList.addEventListener('drop', (e) => {
+  e.preventDefault();
+  els.poolList.classList.remove('drag-over-ok');
+  if (!dragInfo || dragInfo.kind !== 'tree-sub') return;
+  unplaceSubscription(dragInfo.id);
+});
+
+// =====================================================================
+// Side panel
+// =====================================================================
+
+const sp = {
+  panel: document.getElementById('side-panel'),
+  title: document.getElementById('sp-title'),
+  name: document.getElementById('sp-name'),
+  id: document.getElementById('sp-id'),
+  subFields: document.getElementById('sp-sub-fields'),
+  subId: document.getElementById('sp-subid'),
+  mgFields: document.getElementById('sp-mg-fields'),
+  archetype: document.getElementById('sp-archetype'),
+  archetypeStatus: document.getElementById('sp-archetype-status'),
+  archetypeFallback: document.getElementById('sp-archetype-fallback'),
+  exists: document.getElementById('sp-exists'),
+  current: null,
+};
+document.getElementById('sp-close').onclick = closeSidePanel;
+document.getElementById('sp-cancel').onclick = closeSidePanel;
+document.getElementById('sp-save').onclick = () => {
+  if (!sp.current) return;
+  const newName = sp.name.value.trim();
+  const newId = sp.id.value.trim() || sp.current.id;
+  const patch = { name: newName || sp.current.name };
+  if (newId !== sp.current.id) {
+    const ids = allIds(state.root);
+    state.pool.forEach(s => ids.add(s.id));
+    if (ids.has(newId)) { toast('ID already in use'); return; }
+    patch.id = newId;
+  }
+  if (sp.current.type === TYPE.SUB) {
+    patch.subscriptionId = sp.subId.value.trim() || null;
+  } else if (sp.current.type === TYPE.MG) {
+    let arche = sp.archetype.value;
+    if (sp.archetypeFallback.style.display !== 'none' && sp.archetypeFallback.value.trim()) {
+      arche = sp.archetypeFallback.value.trim();
+    }
+    patch.archetypes = arche ? [arche] : [];
+    patch.exists = sp.exists.checked;
+  }
+  updateNode(sp.current.id, patch);
+  closeSidePanel();
+};
+document.getElementById('sp-delete').onclick = () => {
+  if (!sp.current) return;
+  if (sp.current.id === state.root.id) return;
+  if (!confirm(`Delete "${sp.current.name}" and all its children?`)) return;
+  deleteNode(sp.current.id);
+  closeSidePanel();
+};
+
+function openSidePanel(id) {
+  let node = findNode(state.root, id)?.node;
+  if (!node) node = state.pool.find(s => s.id === id);
+  if (!node) return;
+  sp.current = node;
+  selectedId = id;
+  sp.title.textContent = node.type === TYPE.SUB ? 'Edit subscription' : 'Edit management group';
+  sp.name.value = node.name;
+  sp.id.value = node.id;
+  sp.subFields.style.display = node.type === TYPE.SUB ? '' : 'none';
+  sp.mgFields.style.display = node.type === TYPE.MG ? '' : 'none';
+  sp.subId.value = node.subscriptionId || '';
+  sp.exists.checked = !!node.exists;
+  populateArchetypeSelect(node.archetypes && node.archetypes[0]);
+  sp.panel.classList.add('open');
+  render();
+}
+function closeSidePanel() {
+  sp.panel.classList.remove('open');
+  sp.current = null;
+  // Keep selectedId so Ctrl+C / Ctrl+V can target it.
+  render();
+}
+
+// =====================================================================
+// ALZ Library tag + archetype fetch (GitHub)
+// =====================================================================
+
+const LIB_REPO = 'Azure/Azure-Landing-Zones-Library';
+const TAG_PREFIX = 'platform/alz/';
+const TAGS_CACHE_KEY = 'alz-foundations:tags';
+const TAGS_TTL_MS = 24 * 3600 * 1000;
+const ARCH_CACHE_PREFIX = 'alz-foundations:archetypes:';
+
+const tagSelectEl = document.getElementById('alz-tag-select');
+const refreshTagsBtn = document.getElementById('btn-refresh-tags');
+
+let cachedTags = null;
+let archetypesByTag = {}; // in-memory mirror of localStorage
+
+function readJsonLS(key) {
+  try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch { return null; }
+}
+function writeJsonLS(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+}
+
+async function ghJson(url) {
+  const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github+json' } });
+  if (res.status === 403 || res.status === 429) {
+    throw new Error('GitHub rate-limited (60/hr unauth). Try later or refresh.');
+  }
+  if (!res.ok) throw new Error(`GitHub ${res.status} ${res.statusText}`);
+  return await res.json();
+}
+
+async function fetchTags(force = false) {
+  if (!force) {
+    const cached = readJsonLS(TAGS_CACHE_KEY);
+    if (cached && cached.fetchedAt && (Date.now() - cached.fetchedAt) < TAGS_TTL_MS) {
+      cachedTags = cached.tags;
+      return cached.tags;
+    }
+  }
+  // Paginate up to 3 pages (300 tags)
+  const all = [];
+  for (let page = 1; page <= 3; page++) {
+    const url = `https://api.github.com/repos/${LIB_REPO}/tags?per_page=100&page=${page}`;
+    const arr = await ghJson(url);
+    all.push(...arr.map(t => t.name));
+    if (arr.length < 100) break;
+  }
+  const filtered = all
+    .filter(n => n.startsWith(TAG_PREFIX))
+    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+  cachedTags = filtered;
+  writeJsonLS(TAGS_CACHE_KEY, { fetchedAt: Date.now(), tags: filtered });
+  return filtered;
+}
+
+async function fetchArchetypes(tag, force = false) {
+  if (!force) {
+    const cached = readJsonLS(ARCH_CACHE_PREFIX + tag);
+    if (cached) { archetypesByTag[tag] = cached; return cached; }
+  }
+  const url = `https://api.github.com/repos/${LIB_REPO}/contents/platform/alz/archetype_definitions?ref=${encodeURIComponent(tag)}`;
+  const arr = await ghJson(url);
+  const names = arr
+    .filter(e => e.type === 'file' && e.name.endsWith('.alz_archetype_definition.json'))
+    .map(e => e.name.replace(/\.alz_archetype_definition\.json$/, ''))
+    .sort();
+  archetypesByTag[tag] = names;
+  writeJsonLS(ARCH_CACHE_PREFIX + tag, names);
+  return names;
+}
+
+async function loadTagsIntoSelect(force = false) {
+  tagSelectEl.innerHTML = '<option value="">Loading…</option>';
+  tagSelectEl.disabled = true;
+  try {
+    const tags = await fetchTags(force);
+    tagSelectEl.innerHTML = '<option value="">— Select library version —</option>';
+    for (const t of tags) {
+      const opt = document.createElement('option');
+      opt.value = t;
+      opt.textContent = t.replace(/^platform\//, '');
+      tagSelectEl.appendChild(opt);
+    }
+    tagSelectEl.disabled = false;
+    if (state.meta.alzTag && tags.includes(state.meta.alzTag)) {
+      tagSelectEl.value = state.meta.alzTag;
+      // Pre-warm archetype cache for current tag
+      try { await fetchArchetypes(state.meta.alzTag); } catch {}
+    }
+  } catch (e) {
+    tagSelectEl.innerHTML = '<option value="">(failed)</option>';
+    tagSelectEl.disabled = false;
+    toast('Tag fetch failed: ' + e.message);
+  }
+}
+
+async function populateArchetypeSelect(currentValue) {
+  const tag = state.meta.alzTag;
+  const sel = sp.archetype;
+  sel.innerHTML = '<option value="">(none)</option>';
+  sp.archetypeFallback.style.display = 'none';
+  sp.archetypeFallback.value = '';
+  if (!tag) {
+    sp.archetypeStatus.textContent = '— pick a library version in the toolbar first';
+    sel.disabled = true;
+    if (currentValue) {
+      // No tag, but node already has an archetype: keep it visible
+      sp.archetypeFallback.style.display = '';
+      sp.archetypeFallback.value = currentValue;
+    }
+    return;
+  }
+  sel.disabled = true;
+  sp.archetypeStatus.textContent = '— loading…';
+  let names = archetypesByTag[tag] || readJsonLS(ARCH_CACHE_PREFIX + tag);
+  if (!names) {
+    try { names = await fetchArchetypes(tag); }
+    catch (e) {
+      sp.archetypeStatus.textContent = `— fetch failed (${e.message})`;
+      sp.archetypeFallback.style.display = '';
+      sp.archetypeFallback.value = currentValue || '';
+      sel.disabled = false;
+      return;
+    }
+  }
+  archetypesByTag[tag] = names;
+  for (const n of names) {
+    const opt = document.createElement('option');
+    opt.value = n;
+    opt.textContent = n;
+    sel.appendChild(opt);
+  }
+  sel.disabled = false;
+  sp.archetypeStatus.textContent = `— ${names.length} from ${tag.replace(/^platform\//, '')}`;
+  if (currentValue) {
+    if (names.includes(currentValue)) {
+      sel.value = currentValue;
+    } else {
+      // Existing value not in list — surface fallback so user can keep / edit it
+      sp.archetypeFallback.style.display = '';
+      sp.archetypeFallback.value = currentValue;
+    }
+  }
+}
+
+tagSelectEl.addEventListener('change', async () => {
+  state.meta.alzTag = tagSelectEl.value || null;
+  save();
+  if (state.meta.alzTag) {
+    try { await fetchArchetypes(state.meta.alzTag); } catch {}
+  }
+  // Refresh side panel if open on an MG
+  if (sp.current && sp.current.type === TYPE.MG) {
+    populateArchetypeSelect(sp.current.archetypes && sp.current.archetypes[0]);
+  }
+});
+
+refreshTagsBtn.addEventListener('click', async () => {
+  await loadTagsIntoSelect(true);
+  if (state.meta.alzTag) {
+    try { await fetchArchetypes(state.meta.alzTag, true); } catch (e) { toast(e.message); }
+    if (sp.current && sp.current.type === TYPE.MG) {
+      populateArchetypeSelect(sp.current.archetypes && sp.current.archetypes[0]);
+    }
+  }
+  toast('Refreshed from GitHub');
+});
+
+// Boot tag selector after state loaded
+loadTagsIntoSelect();
+
+// =====================================================================
+// Toolbar wiring
+// =====================================================================
+
+document.getElementById('btn-load-ref').onclick = loadReferenceArchitecture;
+document.getElementById('btn-undo').onclick = undo;
+document.getElementById('btn-clear').onclick = () => {
+  if (!confirm('Clear the entire hierarchy and pool?')) return;
+  snapshot();
+  state = { root: makeRoot(), pool: [], meta: state.meta };
+  save(); render();
+};
+document.getElementById('btn-new-mg').onclick = () => {
+  const name = prompt('Management group name:', 'New MG');
+  if (!name) return;
+  const parentId = selectedId && findNode(state.root, selectedId)?.node.type !== TYPE.SUB
+    ? selectedId
+    : (state.root.children[0]?.id || state.root.id);
+  addMg(parentId, name.trim());
+};
+document.getElementById('btn-new-sub').onclick = () => {
+  const name = prompt('Subscription name (added to pool):', 'New subscription');
+  if (!name) return;
+  addSubToPool(name.trim());
+};
+document.getElementById('btn-add-sub-pool').onclick = () => {
+  const inp = document.getElementById('new-sub-name');
+  const name = inp.value.trim();
+  if (!name) return;
+  addSubToPool(name);
+  inp.value = '';
+};
+document.getElementById('new-sub-name').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('btn-add-sub-pool').click();
+});
+
+// Export dropdown
+const dd = document.getElementById('export-dd');
+document.getElementById('btn-export').onclick = (e) => {
+  e.stopPropagation();
+  dd.classList.toggle('open');
+};
+document.addEventListener('click', () => dd.classList.remove('open'));
+dd.querySelectorAll('button[data-export]').forEach(btn => {
+  btn.onclick = () => {
+    dd.classList.remove('open');
+    runExport(btn.dataset.export);
+  };
+});
+
+document.getElementById('btn-import').onclick = openImportDialog;
+
+// Click on empty canvas background → deselect
+els.canvasWrap.addEventListener('click', (e) => {
+  if (e.target === els.canvasWrap || e.target === els.canvas) {
+    selectedId = null;
+    render();
+  }
+});
+
+// Clipboard for copy/paste
+let clipboard = null;
+function deepCloneWithNewIds(node) {
+  return {
+    ...node,
+    id: makeId(node.type === TYPE.SUB ? 'sub' : 'mg'),
+    children: (node.children || []).map(deepCloneWithNewIds),
+  };
+}
+function getSelectedNode() {
+  if (!selectedId) return null;
+  const inTree = findNode(state.root, selectedId)?.node;
+  if (inTree) return inTree;
+  return state.pool.find(s => s.id === selectedId) || null;
+}
+
+// Keyboard
+document.addEventListener('keydown', (e) => {
+  // Don't intercept while typing in inputs/textareas
+  const t = document.activeElement?.tagName;
+  const inField = t === 'INPUT' || t === 'TEXTAREA' || document.activeElement?.isContentEditable;
+
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !inField) {
+    e.preventDefault();
+    undo();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && !inField) {
+    const sel = getSelectedNode();
+    if (!sel || sel.type === TYPE.ROOT) return;
+    clipboard = JSON.parse(JSON.stringify(sel));
+    toast(`Copied "${clipboard.name}"`);
+    e.preventDefault();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && !inField) {
+    if (!clipboard) { toast('Clipboard empty'); return; }
+    const sel = getSelectedNode();
+    if (!sel) { toast('Select a target MG first'); return; }
+    // Subscription clones go under an MG; MG clones must also go under an MG (or root).
+    if (sel.type === TYPE.SUB) { toast('Subscriptions can\'t hold children — pick an MG'); return; }
+    // Pool nodes are not in the tree, can't be parents.
+    if (state.pool.includes(sel)) { toast('Pool items can\'t be parents — pick a tree node'); return; }
+    snapshot();
+    const clone = deepCloneWithNewIds(clipboard);
+    sel.children.push(clone);
+    save(); render();
+    toast(`Pasted "${clone.name}"`);
+    e.preventDefault();
+    return;
+  }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && !inField) {
+    const sel = getSelectedNode();
+    if (!sel || sel.type === TYPE.ROOT) return;
+    e.preventDefault();
+    const name = sel.name;
+    deleteNode(sel.id);
+    selectedId = null;
+    closeSidePanel();
+    toast(`Deleted "${name}" (Ctrl+Z to undo)`);
+    return;
+  }
+  if (e.key === 'Escape') {
+    closeSidePanel();
+    closeModal();
+    selectedId = null;
+    render();
+  }
+});
+
+// =====================================================================
+// Exports
+// =====================================================================
+
+function runExport(kind) {
+  switch (kind) {
+    case 'svg': return exportSvg();
+    case 'png': return exportPng();
+    case 'json': return openModal('JSON model', JSON.stringify(serializeState(), null, 2), 'alz-foundations.json');
+    case 'bicep': return openModal('Bicep', toBicep(), 'alz-foundations.bicep');
+    case 'terraform': return openModal('Terraform', toTerraform(), 'alz-foundations.tf');
+    case 'mermaid': return openModal('Mermaid + outline', toMermaidAndOutline(), 'alz-foundations.md');
+    case 'alz-arch': return exportAlzArch();
+  }
+}
+
+function exportAlzArch() {
+  const defaultName = state.meta.archName || (state.meta.orgName || 'alz').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const name = prompt('Architecture name (used for "name" field, no spaces):', defaultName);
+  if (name === null) return;
+  state.meta.archName = name.trim() || defaultName;
+  save();
+  // Count subs (placed + pool) — format does not include them; warn user.
+  let placedSubs = 0;
+  (function count(n) {
+    if (n.type === TYPE.SUB) placedSubs++;
+    (n.children || []).forEach(count);
+  })(state.root);
+  if (placedSubs + state.pool.length > 0) {
+    toast(`${placedSubs + state.pool.length} subscription(s) omitted — format does not include them`);
+  }
+  const out = toAlzArchDef(state.meta.archName);
+  openModal('ALZ architecture definition', JSON.stringify(out, null, 2), `${state.meta.archName}.alz_architecture_definition.json`);
+}
+
+function toAlzArchDef(archName) {
+  const groups = [];
+  // Walk: emit MGs only (skip TENANT-ROOT and SUBs).
+  // Direct children of state.root → parent_id = null.
+  function visit(node, parentId) {
+    if (node.type === TYPE.MG) {
+      groups.push({
+        archetypes: node.archetypes && node.archetypes.length ? [...node.archetypes] : [],
+        display_name: node.name,
+        exists: !!node.exists,
+        id: node.id,
+        parent_id: parentId,
+      });
+      for (const c of (node.children || [])) visit(c, node.id);
+    } else if (node.type === TYPE.ROOT) {
+      for (const c of (node.children || [])) visit(c, null);
+    }
+    // subs ignored — format has no subscription concept
+  }
+  visit(state.root, null);
+  return {
+    $schema: 'https://raw.githubusercontent.com/Azure/Azure-Landing-Zones-Library/main/schemas/architecture_definition.json',
+    name: archName,
+    management_groups: groups,
+  };
+}
+
+function serializeState() {
+  // Strip layout fields
+  function clean(n) {
+    const { _x, _y, _w, ...rest } = n;
+    return { ...rest, children: (n.children || []).map(clean) };
+  }
+  return {
+    orgName: state.meta.orgName,
+    root: clean(state.root),
+    pool: state.pool.map(clean),
+  };
+}
+
+function buildSvg() {
+  if (!state.root.children.length) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80"><text x="10" y="40" font-family="Segoe UI" font-size="14">Empty hierarchy</text></svg>`;
+  }
+  const { width, height } = layout(state.root);
+  const W = width + PAD * 2;
+  const H = height + PAD * 2 + 60;
+  const NS = 'http://www.w3.org/2000/svg';
+  const parts = [];
+  parts.push(`<svg xmlns="${NS}" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="Segoe UI, system-ui, sans-serif" font-size="13">`);
+  parts.push(`<rect width="100%" height="100%" fill="#ffffff"/>`);
+
+  // Bands
+  const mgChildBox = (() => {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    function visit(n, depth) {
+      if (depth >= 1 && n.type === TYPE.MG) {
+        x0 = Math.min(x0, n._x); y0 = Math.min(y0, n._y);
+        x1 = Math.max(x1, n._x + NODE_W); y1 = Math.max(y1, n._y + NODE_H);
+      }
+      (n.children || []).forEach(c => visit(c, depth + 1));
+    }
+    visit(state.root, 0);
+    return isFinite(x0) ? { x0, y0, x1, y1 } : null;
+  })();
+  const subBox = bbox(state.root, n => n.type === TYPE.SUB);
+  if (mgChildBox) {
+    parts.push(`<rect x="${mgChildBox.x0 - 12 + PAD}" y="${mgChildBox.y0 - 24 + PAD}" width="${mgChildBox.x1 - mgChildBox.x0 + 24}" height="${mgChildBox.y1 - mgChildBox.y0 + 36}" fill="#eef6fc" rx="6"/>`);
+    parts.push(`<text x="${mgChildBox.x0 - 8 + PAD}" y="${mgChildBox.y0 - 28 + PAD}" font-weight="600" fill="#605e5c">Management groups</text>`);
+  }
+  if (subBox) {
+    parts.push(`<rect x="${subBox.x0 - 12 + PAD}" y="${subBox.y0 - 8 + PAD}" width="${subBox.x1 - subBox.x0 + 24}" height="${subBox.y1 - subBox.y0 + 16}" fill="#fff8e1" rx="6"/>`);
+    parts.push(`<text x="${subBox.x0 - 8 + PAD}" y="${subBox.y1 + 24 + PAD}" font-weight="600" fill="#605e5c">Subscriptions</text>`);
+  }
+
+  // Connectors
+  function drawSvgConnectors(node) {
+    for (const c of (node.children || [])) {
+      const x1 = node._x + NODE_W / 2 + PAD;
+      const y1 = node._y + NODE_H + PAD;
+      const x2 = c._x + NODE_W / 2 + PAD;
+      const y2 = c._y + PAD;
+      const ym = y1 + (y2 - y1) / 2;
+      parts.push(`<path d="M ${x1} ${y1} L ${x1} ${ym} L ${x2} ${ym} L ${x2} ${y2}" stroke="#8a8886" stroke-width="1" fill="none"/>`);
+      drawSvgConnectors(c);
+    }
+  }
+  drawSvgConnectors(state.root);
+
+  // Cards
+  function drawSvgNode(n) {
+    const fill = n.type === TYPE.SUB ? '#fff4ce' : '#ffffff';
+    const stroke = n.type === TYPE.SUB ? '#e6c200' : '#d1d1d1';
+    const x = n._x + PAD, y = n._y + PAD;
+    parts.push(`<g>`);
+    parts.push(`<rect x="${x}" y="${y}" width="${NODE_W}" height="${NODE_H}" fill="${fill}" stroke="${stroke}" rx="3"/>`);
+    const label = escapeXml(n.name);
+    // wrap long names by splitting at ~22 chars
+    const lines = wrapLabel(label, 26);
+    const startY = y + (NODE_H - lines.length * 14) / 2 + 12;
+    lines.forEach((line, i) => {
+      parts.push(`<text x="${x + NODE_W / 2}" y="${startY + i * 14}" text-anchor="middle">${line}</text>`);
+    });
+    parts.push(`</g>`);
+    (n.children || []).forEach(drawSvgNode);
+  }
+  drawSvgNode(state.root);
+
+  parts.push(`</svg>`);
+  return parts.join('\n');
+}
+function escapeXml(s) {
+  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
+}
+function wrapLabel(s, n) {
+  if (s.length <= n) return [s];
+  const words = s.split(' ');
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    if ((cur + ' ' + w).trim().length > n && cur) { lines.push(cur); cur = w; }
+    else cur = (cur + ' ' + w).trim();
+  }
+  if (cur) lines.push(cur);
+  return lines.slice(0, 3);
+}
+
+function exportSvg() {
+  const svg = buildSvg();
+  openModal('SVG diagram', svg, 'alz-foundations.svg');
+}
+
+function exportPng() {
+  const svg = buildSvg();
+  const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    const scale = 2; // 2x for crisp output
+    canvas.width = img.width * scale;
+    canvas.height = img.height * scale;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((png) => {
+      URL.revokeObjectURL(url);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(png);
+      a.download = 'alz-foundations.png';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 0);
+      toast('PNG downloaded');
+    }, 'image/png');
+  };
+  img.onerror = () => { toast('PNG export failed'); URL.revokeObjectURL(url); };
+  img.src = url;
+}
+
+function toBicep() {
+  const lines = [];
+  lines.push(`// ALZ Foundations — generated Bicep`);
+  lines.push(`// Deploy MG hierarchy at tenant scope: az deployment tenant create --location <region> --template-file alz-foundations.bicep`);
+  lines.push(`targetScope = 'tenant'`);
+  lines.push('');
+
+  function bicepIdent(id) { return id.replace(/[^a-zA-Z0-9_]/g, '_'); }
+
+  const mgs = [];
+  function collectMgs(n, parentId) {
+    if (n.type === TYPE.MG) {
+      mgs.push({ id: n.id, name: n.name, parentId });
+      for (const c of n.children || []) collectMgs(c, n.id);
+    } else if (n.type === TYPE.ROOT) {
+      for (const c of n.children || []) collectMgs(c, null);
+    }
+  }
+  collectMgs(state.root, null);
+
+  for (const mg of mgs) {
+    const ident = bicepIdent(mg.id);
+    lines.push(`resource ${ident} 'Microsoft.Management/managementGroups@2021-04-01' = {`);
+    lines.push(`  name: '${mg.id}'`);
+    lines.push(`  scope: tenant()`);
+    lines.push(`  properties: {`);
+    lines.push(`    displayName: '${mg.name.replace(/'/g, "\\'")}'`);
+    if (mg.parentId) {
+      lines.push(`    details: {`);
+      lines.push(`      parent: {`);
+      lines.push(`        id: ${bicepIdent(mg.parentId)}.id`);
+      lines.push(`      }`);
+      lines.push(`    }`);
+    }
+    lines.push(`  }`);
+    lines.push(`}`);
+    lines.push('');
+  }
+
+  // Subscription associations
+  const subAssoc = [];
+  const unplaced = [];
+  function collectSubs(n, parentId) {
+    for (const c of (n.children || [])) {
+      if (c.type === TYPE.SUB) subAssoc.push({ sub: c, parentId });
+      else collectSubs(c, c.id);
+    }
+  }
+  collectSubs(state.root, null);
+  unplaced.push(...state.pool);
+
+  if (subAssoc.length) {
+    lines.push(`// Subscription placements — note: subscriptions must already exist; Bicep cannot create them.`);
+    for (const { sub, parentId } of subAssoc) {
+      const ident = bicepIdent(sub.id);
+      const subId = sub.subscriptionId || `00000000-0000-0000-0000-000000000000`;
+      const placeholder = sub.subscriptionId ? '' : ' // TODO: replace with real subscription GUID';
+      lines.push(`resource ${ident} 'Microsoft.Management/managementGroups/subscriptions@2020-05-01' = {`);
+      lines.push(`  parent: ${bicepIdent(parentId)}`);
+      lines.push(`  name: '${subId}'${placeholder}`);
+      lines.push(`}`);
+      lines.push('');
+    }
+  }
+  if (unplaced.length) {
+    lines.push(`/* Unplaced subscriptions (not emitted):`);
+    for (const s of unplaced) lines.push(`  - ${s.name}${s.subscriptionId ? ' (' + s.subscriptionId + ')' : ''}`);
+    lines.push(`*/`);
+  }
+  return lines.join('\n');
+}
+
+function toTerraform() {
+  const lines = [];
+  lines.push(`# ALZ Foundations — generated Terraform`);
+  lines.push(`# terraform init && terraform apply`);
+  lines.push('');
+  lines.push(`terraform {`);
+  lines.push(`  required_providers {`);
+  lines.push(`    azurerm = { source = "hashicorp/azurerm", version = "~> 3.0" }`);
+  lines.push(`  }`);
+  lines.push(`}`);
+  lines.push(`provider "azurerm" { features {} }`);
+  lines.push('');
+
+  function tfIdent(id) { return id.replace(/[^a-zA-Z0-9_]/g, '_'); }
+
+  const mgs = [];
+  function collectMgs(n, parentId) {
+    if (n.type === TYPE.MG) {
+      mgs.push({ id: n.id, name: n.name, parentId });
+      for (const c of n.children || []) collectMgs(c, n.id);
+    } else if (n.type === TYPE.ROOT) {
+      for (const c of n.children || []) collectMgs(c, null);
+    }
+  }
+  collectMgs(state.root, null);
+
+  for (const mg of mgs) {
+    const ident = tfIdent(mg.id);
+    lines.push(`resource "azurerm_management_group" "${ident}" {`);
+    lines.push(`  name         = "${mg.id}"`);
+    lines.push(`  display_name = "${mg.name.replace(/"/g, '\\"')}"`);
+    if (mg.parentId) {
+      lines.push(`  parent_management_group_id = azurerm_management_group.${tfIdent(mg.parentId)}.id`);
+    }
+    lines.push(`}`);
+    lines.push('');
+  }
+
+  const subAssoc = [];
+  function collectSubs(n) {
+    for (const c of (n.children || [])) {
+      if (c.type === TYPE.SUB) subAssoc.push({ sub: c, parentId: n.id });
+      else collectSubs(c);
+    }
+  }
+  collectSubs(state.root);
+
+  if (subAssoc.length) {
+    lines.push(`# Subscription placements — subscriptions must already exist.`);
+    for (const { sub, parentId } of subAssoc) {
+      const ident = tfIdent(sub.id);
+      const subId = sub.subscriptionId || `00000000-0000-0000-0000-000000000000`;
+      const placeholder = sub.subscriptionId ? '' : ' # TODO: replace with real subscription GUID';
+      lines.push(`resource "azurerm_management_group_subscription_association" "${ident}" {`);
+      lines.push(`  management_group_id = azurerm_management_group.${tfIdent(parentId)}.id`);
+      lines.push(`  subscription_id     = "/subscriptions/${subId}"${placeholder}`);
+      lines.push(`}`);
+      lines.push('');
+    }
+  }
+  if (state.pool.length) {
+    lines.push(`# Unplaced subscriptions (not emitted):`);
+    for (const s of state.pool) lines.push(`#   - ${s.name}${s.subscriptionId ? ' (' + s.subscriptionId + ')' : ''}`);
+  }
+  return lines.join('\n');
+}
+
+function toMermaidAndOutline() {
+  const m = ['```mermaid', 'graph TD'];
+  function mid(s) { return s.replace(/[^a-zA-Z0-9_]/g, '_'); }
+  function visit(n, parent) {
+    const id = mid(n.id);
+    const label = n.name.replace(/"/g, "'");
+    if (n.type === TYPE.SUB) m.push(`  ${id}[/"${label}"/]`);
+    else m.push(`  ${id}["${label}"]`);
+    if (parent) m.push(`  ${mid(parent.id)} --> ${id}`);
+    for (const c of (n.children || [])) visit(c, n);
+  }
+  visit(state.root, null);
+  m.push('```');
+
+  const o = ['', '## Outline', ''];
+  function outline(n, depth) {
+    const prefix = '  '.repeat(depth) + (depth === 0 ? '' : '- ');
+    const tag = n.type === TYPE.SUB ? ' (sub)' : (n.type === TYPE.ROOT ? '' : '');
+    o.push(prefix + n.name + tag);
+    for (const c of (n.children || [])) outline(c, depth + 1);
+  }
+  outline(state.root, 0);
+  if (state.pool.length) {
+    o.push('', '## Unplaced subscriptions', '');
+    for (const s of state.pool) o.push('- ' + s.name);
+  }
+  return m.join('\n') + '\n' + o.join('\n');
+}
+
+// =====================================================================
+// Modal (export + import)
+// =====================================================================
+
+const modal = {
+  backdrop: document.getElementById('modal-backdrop'),
+  title: document.getElementById('modal-title'),
+  content: document.getElementById('modal-content'),
+  textarea: document.getElementById('modal-textarea'),
+  copy: document.getElementById('modal-copy'),
+  download: document.getElementById('modal-download'),
+  importBtn: document.getElementById('modal-import-confirm'),
+  filename: 'export.txt',
+  mime: 'text/plain',
+};
+document.getElementById('modal-close').onclick = closeModal;
+modal.backdrop.addEventListener('click', (e) => {
+  if (e.target === modal.backdrop) closeModal();
+});
+modal.copy.onclick = () => {
+  const text = modal.textarea.style.display !== 'none' ? modal.textarea.value : modal.content.textContent;
+  navigator.clipboard.writeText(text).then(() => toast('Copied'));
+};
+modal.download.onclick = () => {
+  const text = modal.textarea.style.display !== 'none' ? modal.textarea.value : modal.content.textContent;
+  const blob = new Blob([text], { type: modal.mime });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = modal.filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 0);
+  toast('Downloaded');
+};
+
+function openModal(title, content, filename) {
+  modal.title.textContent = title;
+  modal.content.textContent = content;
+  modal.content.style.display = '';
+  modal.textarea.style.display = 'none';
+  modal.copy.style.display = '';
+  modal.download.style.display = '';
+  modal.importBtn.style.display = 'none';
+  if (modal.browse) modal.browse.style.display = 'none';
+  modal.filename = filename || 'export.txt';
+  if (filename?.endsWith('.svg')) modal.mime = 'image/svg+xml';
+  else if (filename?.endsWith('.json')) modal.mime = 'application/json';
+  else modal.mime = 'text/plain';
+  modal.backdrop.classList.add('open');
+}
+function closeModal() {
+  modal.backdrop.classList.remove('open');
+}
+function openImportDialog() {
+  modal.title.textContent = 'Import JSON';
+  modal.content.style.display = 'none';
+  modal.textarea.style.display = '';
+  modal.textarea.value = '';
+  modal.textarea.placeholder = 'Paste JSON, click Browse…, or drop a .json file here.\nAuto-detects:\n  • Native JSON model (root + pool)\n  • ALZ architecture definition (management_groups[]) — avm-ptn-alz Terraform module input';
+  modal.copy.style.display = 'none';
+  modal.download.style.display = 'none';
+  modal.browse.style.display = '';
+  modal.importBtn.style.display = '';
+  modal.backdrop.classList.add('open');
+}
+const browseBtn = document.getElementById('modal-browse');
+const fileInput = document.getElementById('modal-file-input');
+modal.browse = browseBtn;
+browseBtn.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', async () => {
+  const f = fileInput.files[0];
+  if (!f) return;
+  try {
+    modal.textarea.value = await f.text();
+    toast(`Loaded ${f.name}`);
+  } catch (e) {
+    toast('Read failed: ' + e.message);
+  }
+  fileInput.value = '';
+});
+modal.importBtn.onclick = () => {
+  try {
+    const parsed = JSON.parse(modal.textarea.value);
+    snapshot();
+    if (Array.isArray(parsed.management_groups)) {
+      state = importAlzArchDef(parsed);
+      toast(`Imported ALZ architecture "${parsed.name || 'unnamed'}"`);
+    } else if (parsed.root) {
+      state = {
+        root: parsed.root,
+        pool: parsed.pool || [],
+        meta: { orgName: parsed.orgName || 'Contoso', archName: parsed.archName || null },
+      };
+      toast('Imported');
+    } else {
+      throw new Error('Unrecognized JSON — need management_groups[] or root{}');
+    }
+    save(); render();
+    closeModal();
+  } catch (e) {
+    toast('Import failed: ' + e.message);
+  }
+};
+
+function importAlzArchDef(doc) {
+  const groups = doc.management_groups || [];
+  const map = new Map();
+  for (const g of groups) {
+    map.set(g.id, {
+      id: g.id,
+      type: TYPE.MG,
+      name: g.display_name || g.id,
+      archetypes: Array.isArray(g.archetypes) ? [...g.archetypes] : [],
+      exists: !!g.exists,
+      children: [],
+    });
+  }
+  const root = makeRoot();
+  for (const g of groups) {
+    const node = map.get(g.id);
+    if (g.parent_id == null) {
+      root.children.push(node);
+    } else {
+      const parent = map.get(g.parent_id);
+      if (!parent) throw new Error(`Unknown parent_id "${g.parent_id}" for "${g.id}"`);
+      parent.children.push(node);
+    }
+  }
+  // Pick org name from the first root-archetype MG, fall back to the first top-level
+  const topLevel = root.children[0];
+  const orgName = topLevel ? topLevel.name : 'Contoso';
+  return {
+    root,
+    pool: [],
+    meta: { orgName, archName: doc.name || null },
+  };
+}
+modal.textarea.addEventListener('drop', (e) => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (!f) return;
+  f.text().then(t => modal.textarea.value = t);
+});
+modal.textarea.addEventListener('dragover', (e) => e.preventDefault());
+
+// =====================================================================
+// Toast
+// =====================================================================
+
+const toastEl = document.getElementById('toast');
+let toastTimer;
+function toast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1800);
+}
+
+// =====================================================================
+// Boot
+// =====================================================================
+
+if (load()) {
+  // Restored from localStorage silently
+}
+render();
+
+</script>
+</body>
+</html>
