@@ -70,6 +70,16 @@ Rate limit (GitHub unauth, 60/hr/IP) handled with toast + manual-entry fallback 
 - ALZ architecture definition — flat `management_groups[]`. Skips subscriptions (format has none) with a toast.
 - AVM subs placement (HCL) — `subscription_placement = { … }` block. Key = slugified sub name (lowercase, alphanumeric+underscore, deduped with numeric suffix). `subscription_id` from sub node (placeholder UUID + `# TODO` comment if unset). `management_group_name` = parent MG's `id`. Unplaced subs are listed as comments only.
 
+## Archetype X-ray (live policy heat map)
+
+For every MG with an archetype assigned and a Library tag selected, the app fetches the full archetype definition from `raw.githubusercontent.com/Azure/Azure-Landing-Zones-Library/<tag>/platform/alz/archetype_definitions/<name>.alz_archetype_definition.json`. Cached under `alz-foundations:archetype-def:<tag>||<name>` (no TTL — tags immutable). Refresh button invalidates the cache for the active tag.
+
+- **Canvas badge**: each MG with archetype shows a `Np` badge in the upper-right (N = effective policy_assignments count, summed from own + ancestor archetypes). Color heat scales from white (0) → light blue → deep blue (max in tree). Hover reveals breakdown tooltip with own + each ancestor's contribution.
+- **Side panel X-ray section** (`#sp-xray`): expandable lists for `policy_assignments`, `policy_definitions`, `policy_set_definitions`, `role_assignments`, `role_definitions` with item counts per section. Below: blue effective-count card + collapsible inheritance trail.
+- Loading badges show `…`; failed fetches degrade silently (no badge).
+
+raw.githubusercontent.com is on a separate quota from the API (60/hr/IP unauth) — no extra rate-limit handling needed.
+
 ## Command palette
 
 `Ctrl/Cmd+K` (or `⌘K` toolbar button) opens fuzzy-search palette. Three sections in results:

@@ -18,6 +18,7 @@ If you want a starting point instead of a blank canvas, click **Load reference a
 
 - **Design** an MG hierarchy visually with drag-and-drop. Subscriptions sit in a side pool until you place them under an MG.
 - **Pick archetypes** for each MG from the official [Azure Landing Zones Library](https://github.com/Azure/Azure-Landing-Zones-Library), fetched live from GitHub. Choose the library tag once per architecture (e.g. `platform/alz/2026.04.2`) and the archetype list updates accordingly.
+- **See effective Azure policies at a glance** with archetype X-ray. Pick a Library version and the app pulls every archetype definition from GitHub, then stamps each management group with a heat-coloured badge showing how many `policy_assignments` apply (own + inherited from ancestors). Hover for a per-ancestor breakdown; open the side panel for the full list of policy assignments, definitions, role assignments, etc., with the inheritance trail.
 - **Find anything fast** with the command palette (<kbd>Ctrl/Cmd</kbd>+<kbd>K</kbd> or the <kbd>⌘K</kbd> toolbar button). Fuzzy-searches every management group and subscription by name, plus every toolbar action — results are grouped and icon-coded so MGs, subs, and actions are easy to tell apart. Picking a node jumps the canvas to it and opens the side panel.
 - **Import** existing designs from any of:
   - the `avm-ptn-alz` Terraform module's `*.alz_architecture_definition.json` format,

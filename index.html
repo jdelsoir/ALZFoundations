@@ -463,6 +463,113 @@
     padding: 1px 4px;
     background: #fff;
   }
+
+  /* Archetype X-ray badge on MG cards */
+  .policy-badge {
+    position: absolute;
+    top: -9px;
+    right: -9px;
+    font-size: 10px;
+    font-weight: 600;
+    border-radius: 10px;
+    padding: 1px 6px;
+    border: 2px solid #fff;
+    z-index: 4;
+    box-shadow: 0 1px 3px rgba(0,0,0,.18);
+    cursor: help;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+  .policy-badge.heat-0 { background: #f3f2f1; color: #605e5c; }
+  .policy-badge.heat-1 { background: #c7e0f4; color: #003d6b; }
+  .policy-badge.heat-2 { background: #71afe5; color: #fff; }
+  .policy-badge.heat-3 { background: #2b88d8; color: #fff; }
+  .policy-badge.heat-4 { background: #004578; color: #fff; }
+  .policy-badge.loading { background: #f3f2f1; color: #a19f9d; }
+
+  .xray-tooltip {
+    position: fixed;
+    background: #1a1a1a;
+    color: #fff;
+    padding: 10px 12px;
+    border-radius: 4px;
+    font-size: 11px;
+    max-width: 380px;
+    z-index: 600;
+    pointer-events: none;
+    box-shadow: 0 6px 16px rgba(0,0,0,.3);
+    line-height: 1.45;
+  }
+  .xray-tooltip .ttl { font-weight: 600; margin-bottom: 4px; font-size: 12px; }
+  .xray-tooltip .row { display: flex; justify-content: space-between; gap: 12px; }
+  .xray-tooltip .row .src { color: #4cc2ff; }
+  .xray-tooltip .row .cnt { color: #fcd34d; font-variant-numeric: tabular-nums; }
+  .xray-tooltip hr { border: 0; border-top: 1px solid #444; margin: 6px 0; }
+
+  /* Side-panel x-ray */
+  .xray-section {
+    margin-top: 16px;
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+  }
+  .xray-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+  }
+  .xray-status { font-size: 12px; color: var(--muted); font-style: italic; }
+  details.xray-group { margin-bottom: 4px; }
+  details.xray-group > summary {
+    cursor: pointer;
+    padding: 4px 0;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    list-style: none;
+  }
+  details.xray-group > summary::-webkit-details-marker { display: none; }
+  details.xray-group > summary::before {
+    content: '▶';
+    font-size: 8px;
+    transition: transform .15s;
+    color: var(--muted);
+    width: 8px;
+  }
+  details.xray-group[open] > summary::before { transform: rotate(90deg); }
+  details.xray-group > summary .count {
+    background: var(--azure-blue);
+    color: #fff;
+    border-radius: 8px;
+    font-size: 10px;
+    padding: 1px 6px;
+    font-weight: 600;
+    margin-left: auto;
+  }
+  details.xray-group > summary .count.zero { background: #f3f2f1; color: var(--muted); }
+  ul.xray-list {
+    list-style: none;
+    padding: 4px 0 6px 16px;
+    margin: 0;
+    font-size: 11px;
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    color: var(--text);
+    max-height: 220px;
+    overflow: auto;
+  }
+  ul.xray-list li { padding: 1px 0; line-height: 1.4; word-break: break-all; }
+  .xray-effective {
+    margin-top: 12px;
+    padding: 8px 10px;
+    background: #eef6fc;
+    border-left: 3px solid var(--azure-blue);
+    border-radius: 0 4px 4px 0;
+    font-size: 12px;
+  }
+  .xray-effective b { color: var(--azure-blue); font-size: 14px; }
 </style>
 </head>
 <body>
@@ -546,6 +653,7 @@
         <input type="checkbox" id="sp-exists" style="width:auto;margin:0;" />
         <span>Already exists in Azure (<code>exists: true</code>)</span>
       </label>
+      <div id="sp-xray"></div>
     </div>
   </div>
   <footer>
@@ -914,6 +1022,8 @@ function render() {
     els.connectors.setAttribute('width', width + PAD * 2);
     els.connectors.setAttribute('height', height + PAD * 2 + 40);
 
+    _maxEffective = computeMaxEffective();
+
     // Bands: compute MG-band (covers all MG levels) and SUB-band (just subscriptions)
     const mgBox = bbox(state.root, n => n.type !== TYPE.SUB);
     const subBox = bbox(state.root, n => n.type === TYPE.SUB);
@@ -991,6 +1101,9 @@ function render() {
     item.addEventListener('click', () => openSidePanel(sub.id));
     els.poolList.appendChild(item);
   }
+
+  // Async: fetch any missing archetype defs, then re-render so badges update
+  if (state.meta.alzTag) prefetchArchetypeDefs();
 }
 
 function bbox(root, predicate) {
@@ -1033,7 +1146,70 @@ function renderNode(node) {
   }
 
   els.canvas.appendChild(el);
+
+  // Archetype X-ray badge — MG only, when a library tag is selected
+  if (node.type === TYPE.MG && state.meta.alzTag) {
+    const tag = state.meta.alzTag;
+    const archetypes = node.archetypes || [];
+    const hasArchetype = archetypes.some(a => !!a);
+    if (hasArchetype) {
+      const allCached = archetypes.every(a => archDefSync(tag, a));
+      const badge = document.createElement('div');
+      if (!allCached) {
+        badge.className = 'policy-badge loading';
+        badge.textContent = '…';
+        badge.title = 'Loading archetype contents';
+      } else {
+        const { total, sources } = inheritedDetails(node);
+        badge.className = 'policy-badge heat-' + heatLevel(total, _maxEffective);
+        badge.textContent = total + 'P';
+        badge.addEventListener('mouseenter', (e) => showXrayTooltip(e, node, total, sources));
+        badge.addEventListener('mouseleave', hideXrayTooltip);
+        badge.addEventListener('mousemove', moveXrayTooltip);
+      }
+      el.appendChild(badge);
+    }
+  }
+
   for (const c of (node.children || [])) renderNode(c);
+}
+
+let _maxEffective = 0;
+
+let _xrayTipEl = null;
+function showXrayTooltip(e, node, total, sources) {
+  if (!_xrayTipEl) {
+    _xrayTipEl = document.createElement('div');
+    _xrayTipEl.className = 'xray-tooltip';
+    document.body.appendChild(_xrayTipEl);
+  }
+  const own = sources.filter(s => s.self);
+  const inh = sources.filter(s => !s.self);
+  let html = `<div class="ttl">${escapeHtml(node.name)} — ${total} effective policy assignments</div>`;
+  if (own.length) {
+    html += own.map(s =>
+      `<div class="row"><span class="src">${escapeHtml(s.archetype)} (own)</span><span class="cnt">${s.count == null ? '?' : s.count}</span></div>`
+    ).join('');
+  }
+  if (inh.length) {
+    html += '<hr/>';
+    html += inh.map(s =>
+      `<div class="row"><span class="src">${escapeHtml(s.mg)} · ${escapeHtml(s.archetype)}</span><span class="cnt">${s.count == null ? '?' : s.count}</span></div>`
+    ).join('');
+  }
+  _xrayTipEl.innerHTML = html;
+  moveXrayTooltip(e);
+}
+function moveXrayTooltip(e) {
+  if (!_xrayTipEl) return;
+  const x = e.clientX + 14;
+  const y = e.clientY + 14;
+  _xrayTipEl.style.left = Math.min(x, window.innerWidth - 400) + 'px';
+  _xrayTipEl.style.top = Math.min(y, window.innerHeight - 200) + 'px';
+}
+function hideXrayTooltip() {
+  if (_xrayTipEl) _xrayTipEl.remove();
+  _xrayTipEl = null;
 }
 
 function drawConnectors(node) {
@@ -1201,8 +1377,84 @@ function openSidePanel(id) {
   sp.subId.value = node.subscriptionId || '';
   sp.exists.checked = !!node.exists;
   populateArchetypeSelect(node.archetypes && node.archetypes[0]);
+  populateXray(node);
   sp.panel.classList.add('open');
   render();
+}
+
+async function populateXray(node) {
+  const xray = document.getElementById('sp-xray');
+  if (!xray) return;
+  if (node.type !== TYPE.MG) { xray.innerHTML = ''; return; }
+  const tag = state.meta.alzTag;
+  const arche = (node.archetypes || []).find(a => !!a);
+  if (!tag) {
+    xray.innerHTML = `<div class="xray-section"><div class="xray-status">Pick a Library version above to see archetype contents.</div></div>`;
+    return;
+  }
+  if (!arche) {
+    xray.innerHTML = `<div class="xray-section"><div class="xray-status">No archetype assigned.</div></div>`;
+    return;
+  }
+  xray.innerHTML = `<div class="xray-section"><div class="xray-title">Archetype X-ray — ${escapeHtml(arche)}</div><div class="xray-status">Loading…</div></div>`;
+  let def;
+  try {
+    def = await fetchArchetypeDef(tag, arche);
+  } catch (e) {
+    xray.innerHTML = `<div class="xray-section"><div class="xray-title">Archetype X-ray — ${escapeHtml(arche)}</div><div class="xray-status">Fetch failed: ${escapeHtml(e.message)}</div></div>`;
+    return;
+  }
+  // After fetch, re-render canvas badges
+  render();
+  // If user navigated away, abort UI update
+  if (sp.current?.id !== node.id) return;
+  renderXrayPanel(node, def, arche, tag);
+}
+
+function renderXrayPanel(node, def, arche, tag) {
+  const xray = document.getElementById('sp-xray');
+  const sections = [
+    ['Policy assignments', def.policy_assignments],
+    ['Policy definitions', def.policy_definitions],
+    ['Policy set definitions', def.policy_set_definitions],
+    ['Role assignments', def.role_assignments],
+    ['Role definitions', def.role_definitions],
+  ];
+  let html = `<div class="xray-section"><div class="xray-title">Archetype X-ray — ${escapeHtml(arche)} <span style="font-weight:400;color:var(--muted);">@ ${escapeHtml(tag.replace(/^platform\//, ''))}</span></div>`;
+  for (const [title, arr] of sections) {
+    const list = Array.isArray(arr) ? arr : [];
+    const open = title === 'Policy assignments' && list.length ? ' open' : '';
+    html += `<details class="xray-group"${open}>`;
+    html += `<summary>${escapeHtml(title)} <span class="count${list.length ? '' : ' zero'}">${list.length}</span></summary>`;
+    if (list.length) {
+      html += '<ul class="xray-list">';
+      for (const item of list) {
+        const text = typeof item === 'string' ? item : JSON.stringify(item);
+        html += `<li>${escapeHtml(text)}</li>`;
+      }
+      html += '</ul>';
+    }
+    html += '</details>';
+  }
+
+  // Effective inheritance summary
+  const { total, sources } = inheritedDetails(node);
+  if (sources.length) {
+    html += '<div class="xray-effective">';
+    html += `Effective policy assignments at this MG: <b>${total}</b><br/>`;
+    html += '<span style="color:var(--muted);font-size:11px;">Sums own + ancestor archetypes.</span>';
+    html += '</div>';
+    html += '<details class="xray-group" style="margin-top:8px;"><summary>Inheritance trail <span class="count">' + sources.length + '</span></summary>';
+    html += '<ul class="xray-list">';
+    for (const s of sources) {
+      const lbl = s.self ? '<b>self</b>' : escapeHtml(s.mg);
+      const cnt = s.count == null ? '<span style="color:#a4262c;">?</span>' : s.count;
+      html += `<li>${lbl} · ${escapeHtml(s.archetype)} → ${cnt}</li>`;
+    }
+    html += '</ul></details>';
+  }
+  html += '</div>';
+  xray.innerHTML = html;
 }
 function closeSidePanel() {
   sp.panel.classList.remove('open');
@@ -1281,6 +1533,131 @@ async function fetchArchetypes(tag, force = false) {
   archetypesByTag[tag] = names;
   writeJsonLS(ARCH_CACHE_PREFIX + tag, names);
   return names;
+}
+
+// =====================================================================
+// Archetype X-ray — fetch full archetype definitions from raw.githubusercontent
+// =====================================================================
+
+const ARCH_DEF_CACHE_PREFIX = 'alz-foundations:archetype-def:';
+const archetypeDefs = {}; // key: 'tag||name'  → def JSON
+const inFlightDefs = {}; // key → promise (dedupe in-flight fetches)
+
+function archDefKey(tag, name) { return tag + '||' + name; }
+
+function archDefSync(tag, name) {
+  const key = archDefKey(tag, name);
+  if (archetypeDefs[key]) return archetypeDefs[key];
+  const ls = readJsonLS(ARCH_DEF_CACHE_PREFIX + key);
+  if (ls) { archetypeDefs[key] = ls; return ls; }
+  return null;
+}
+
+async function fetchArchetypeDef(tag, name) {
+  const key = archDefKey(tag, name);
+  const cached = archDefSync(tag, name);
+  if (cached) return cached;
+  if (inFlightDefs[key]) return inFlightDefs[key];
+  // raw.githubusercontent.com — separate from GitHub API rate limit
+  const url = `https://raw.githubusercontent.com/${LIB_REPO}/${tag}/platform/alz/archetype_definitions/${encodeURIComponent(name)}.alz_archetype_definition.json`;
+  inFlightDefs[key] = (async () => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Fetch ${name}: ${res.status}`);
+      const def = await res.json();
+      archetypeDefs[key] = def;
+      writeJsonLS(ARCH_DEF_CACHE_PREFIX + key, def);
+      return def;
+    } finally {
+      delete inFlightDefs[key];
+    }
+  })();
+  return inFlightDefs[key];
+}
+
+let prefetching = false;
+async function prefetchArchetypeDefs() {
+  if (prefetching) return;
+  const tag = state.meta.alzTag;
+  if (!tag) return;
+  const used = new Set();
+  (function walk(n) {
+    if (n.type === TYPE.MG) (n.archetypes || []).forEach(a => a && used.add(a));
+    (n.children || []).forEach(walk);
+  })(state.root);
+  const missing = [...used].filter(a => !archDefSync(tag, a));
+  if (!missing.length) return;
+  prefetching = true;
+  let any = false;
+  await Promise.all(missing.map(a =>
+    fetchArchetypeDef(tag, a).then(() => { any = true; }).catch(() => {})
+  ));
+  prefetching = false;
+  if (any) render();
+}
+
+function policyAssignmentCount(def) {
+  if (!def) return 0;
+  return (def.policy_assignments || []).length;
+}
+
+// Returns ordered list of MG ancestors (including self) with policy details.
+function inheritedDetails(node) {
+  const tag = state.meta.alzTag;
+  if (!tag) return { total: 0, sources: [] };
+  const ancestors = [];
+  (function walk(n, path) {
+    if (n.id === node.id) { ancestors.push(...path, n); return true; }
+    for (const c of (n.children || [])) {
+      if (walk(c, [...path, n])) return true;
+    }
+    return false;
+  })(state.root, []);
+  let total = 0;
+  const sources = [];
+  for (const n of ancestors) {
+    if (n.type !== TYPE.MG) continue;
+    for (const a of (n.archetypes || [])) {
+      const def = archDefSync(tag, a);
+      if (!def) {
+        sources.push({ mg: n.name, archetype: a, count: null, self: n.id === node.id });
+        continue;
+      }
+      const c = policyAssignmentCount(def);
+      total += c;
+      sources.push({ mg: n.name, archetype: a, count: c, self: n.id === node.id });
+    }
+  }
+  return { total, sources };
+}
+
+function heatLevel(count, max) {
+  if (!count || max <= 0) return 0;
+  const pct = count / max;
+  if (pct < 0.25) return 1;
+  if (pct < 0.5) return 2;
+  if (pct < 0.75) return 3;
+  return 4;
+}
+
+// Compute global max effective count for color scaling
+function computeMaxEffective() {
+  const tag = state.meta.alzTag;
+  if (!tag) return 0;
+  let max = 0;
+  function walk(n, accum) {
+    let local = accum;
+    if (n.type === TYPE.MG) {
+      for (const a of (n.archetypes || [])) {
+        const def = archDefSync(tag, a);
+        if (def) local += policyAssignmentCount(def);
+      }
+      if (local > max) max = local;
+    }
+    for (const c of (n.children || [])) walk(c, local);
+  }
+  walk(state.root, 0);
+  return max;
 }
 
 async function loadTagsIntoSelect(force = false) {
@@ -1366,16 +1743,24 @@ tagSelectEl.addEventListener('change', async () => {
   // Refresh side panel if open on an MG
   if (sp.current && sp.current.type === TYPE.MG) {
     populateArchetypeSelect(sp.current.archetypes && sp.current.archetypes[0]);
+    populateXray(sp.current);
   }
+  // Refresh canvas badges (clear stale heat from prior tag, kick prefetch)
+  render();
 });
 
 refreshTagsBtn.addEventListener('click', async () => {
   await loadTagsIntoSelect(true);
   if (state.meta.alzTag) {
     try { await fetchArchetypes(state.meta.alzTag, true); } catch (e) { toast(e.message); }
+    // Bust archetype-def cache for current tag so heat map refetches
+    Object.keys(archetypeDefs).forEach(k => { if (k.startsWith(state.meta.alzTag + '||')) delete archetypeDefs[k]; });
+    Object.keys(localStorage).filter(k => k.startsWith(ARCH_DEF_CACHE_PREFIX + state.meta.alzTag + '||')).forEach(k => localStorage.removeItem(k));
     if (sp.current && sp.current.type === TYPE.MG) {
       populateArchetypeSelect(sp.current.archetypes && sp.current.archetypes[0]);
+      populateXray(sp.current);
     }
+    render();
   }
   toast('Refreshed from GitHub');
 });
