@@ -35,9 +35,20 @@ Persistence: `localStorage['alz-foundations:state']`, debounced 200ms.
 
 ## Layout
 
-Tidy-tree (Reingold–Tilford simplified). Y-coordinate forced for all subscriptions to a single bottom row (`maxMgDepth + 1`) regardless of where they live in the tree — so the yellow "Subscriptions" band never overlaps leaf MGs.
+Tidy-tree (Reingold–Tilford simplified) for **MG nodes only**. Subscriptions are not in the tidy-tree pass — they're placed afterwards in a third layout pass.
 
-Z-stack inside `.canvas`: bands (`z-index: 1`) → connectors SVG (2) → node cards (3).
+Three passes in `layout()`:
+1. **Width** (`first`): per MG subtree, sum of MG-children widths only (subs share parent's column, don't add width).
+2. **Place MGs** (`placeMgs`): assign x,y for every MG via tidy-tree.
+3. **Place subs** (`placeSubs`): compute `subStartY = maxMgBottom + V_GAP` (one row below the deepest MG anywhere in the tree). Every sub stack starts at this **uniform global Y** in its parent's x column. So a sub of a depth-2 MG starts at the same Y as a sub of a depth-3 MG — it just gets a longer trunk connector. This keeps the global "Subscriptions" yellow band as a clean horizontal strip below the MG band.
+
+Sub cards have **variable height** via `estimateSubHeight(name)` (lines = ceil(text / ~17 chars), height = lines × 17px + 24px padding, min `NODE_H`). Stacked subs accumulate y by `prev._h + SUB_VGAP` (10px), not a fixed step. `_h` is stored on each sub node so `bbox()` and the global sub-band wrap them correctly.
+
+Connector trunk: each parent draws **one** vertical line from its bottom-mid down to the **first** sub of its stack. Subsequent subs are visually adjacent in the same column — no per-sub line (cleaner, no overdraw).
+
+**Subscription pool** is a fixed-position panel collapsed by default, slid off-screen via `transform: translateX(100%)`. A floating `.pool-toggle` button (top-right of canvas area) shows a count badge and toggles `.pool.open`. The toggle button doubles as a drop target for un-placing subscriptions (so you can un-place without opening the pool first). The pool itself has a close-X.
+
+Z-stack inside `.canvas`: bands (`z-index: 1`) → connectors SVG (2) → node cards (3). Pool toggle (95) and pool (90) sit above the canvas. Side panel (200) and modals (300+) sit on top.
 
 ## ALZ Library integration (live GitHub)
 

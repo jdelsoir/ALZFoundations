@@ -1028,19 +1028,19 @@ function loadReferenceArchitecture() {
   const sub = (name) => ({ id: makeId('sub'), type: TYPE.SUB, name, subscriptionId: null, children: [] });
   const org = mg('Contoso', state.meta.orgName || 'Contoso', ['root'], [
     mg('Platform', 'Platform', ['platform'], [
-      mg('Security', 'Security', [], [sub('Security subscription')]),
+      mg('Security', 'Security', ['security'], [sub('Security subscription')]),
       mg('Management', 'Management', ['management'], [sub('Management subscription')]),
       mg('Identity', 'Identity', ['identity'], [sub('Identity subscription')]),
-      mg('Connectivity', 'Connectivity', ['connectivity_override'], [sub('Connectivity subscription')]),
+      mg('Connectivity', 'Connectivity', ['connectivity'], [sub('Connectivity subscription')]),
     ]),
-    mg('LandingZones', 'Landing zones', ['landing_zones_override'], [
+    mg('LandingZones', 'Landing zones', ['landing_zones'], [
       mg('Corp', 'Corp', ['corp'], [
         sub('Landing zone A1 subscription'),
         sub('Landing zone P1 subscription'),
         sub('Landing zone A2 subscription'),
       ]),
       mg('Online', 'Online', ['online']),
-      mg('Local', 'Local', ['corp'], [
+      mg('Local', 'Local', ['local'], [
         sub('Landing zone LC1 subscription (Azure Local Clusters)'),
         sub('Landing zone LA1 subscription (Applications)'),
       ]),
@@ -1067,61 +1067,91 @@ const H_GAP = 18;
 const V_GAP = 56;
 const PAD = 24;
 
+// Subscriptions stack vertically directly UNDER their parent MG (same column).
+// Each sub card auto-sizes vertically to its text; we estimate its height so
+// stacked subs don't visually overlap. MG children are pushed further down to
+// clear the sub stack.
+const SUB_GAP = 8;                 // gap between parent MG bottom and first sub
+const SUB_VGAP = 10;               // gap between stacked subs
+const SUB_LINE_H = 17;             // line-height inside sub card
+const SUB_PADDING_V = 24;          // 10px padding * 2 + glyph baseline pad
+
+function estimateSubHeight(name) {
+  // NODE_W = 180, internal pad 12*2 = 24 → ~156px usable. Empirical: ~17 chars/line.
+  const charsPerLine = 17;
+  const text = String(name || '');
+  // Rough line count: split by long words too
+  const lines = Math.max(1, Math.ceil(text.length / charsPerLine));
+  return Math.max(NODE_H, lines * SUB_LINE_H + SUB_PADDING_V);
+}
+
+function mgChildren(n) { return (n.children || []).filter(c => c.type !== TYPE.SUB); }
+function subChildren(n) { return (n.children || []).filter(c => c.type === TYPE.SUB); }
+
 function layout(root) {
-  // First pass: assign x relative to subtree
+  // First pass: width of each subtree (MG children only — subs share parent's column).
   function first(node) {
-    const kids = node.children || [];
-    if (!kids.length) {
+    const mgKids = mgChildren(node);
+    if (!mgKids.length) {
       node._w = NODE_W;
       return;
     }
+    mgKids.forEach(first);
     let total = 0;
-    kids.forEach(first);
-    kids.forEach((k, i) => {
-      total += k._w;
-      if (i > 0) total += H_GAP;
-    });
+    mgKids.forEach((k, i) => { total += k._w; if (i > 0) total += H_GAP; });
     node._w = Math.max(NODE_W, total);
   }
-  // Pre-compute deepest MG depth so all subs share one bottom row
-  let maxMgDepth = 0;
-  (function scan(n, d) {
-    if (n.type !== TYPE.SUB) maxMgDepth = Math.max(maxMgDepth, d);
-    (n.children || []).forEach(c => scan(c, d + 1));
-  })(root, 0);
-  const subRowY = (maxMgDepth + 1) * (NODE_H + V_GAP);
 
-  // Second pass: assign absolute x,y
-  function place(node, x, y) {
-    node._y = node.type === TYPE.SUB ? subRowY : y;
-    const kids = node.children || [];
-    if (!kids.length) {
+  // Second pass: place MGs only.
+  function placeMgs(node, x, y) {
+    node._y = y;
+    const mgKids = mgChildren(node);
+    if (!mgKids.length) {
       node._x = x + (node._w - NODE_W) / 2;
       return;
     }
-    let cursor = x;
     let total = 0;
-    kids.forEach((k, i) => {
-      total += k._w;
-      if (i > 0) total += H_GAP;
-    });
-    cursor = x + (node._w - total) / 2;
-    for (const k of kids) {
-      place(k, cursor, y + NODE_H + V_GAP);
+    mgKids.forEach((k, i) => { total += k._w; if (i > 0) total += H_GAP; });
+    let cursor = x + (node._w - total) / 2;
+    for (const k of mgKids) {
+      placeMgs(k, cursor, y + NODE_H + V_GAP);
       cursor += k._w + H_GAP;
     }
-    // center node above its kids
-    const firstKid = kids[0], lastKid = kids[kids.length - 1];
+    const firstKid = mgKids[0], lastKid = mgKids[mgKids.length - 1];
     const mid = (firstKid._x + lastKid._x + NODE_W) / 2;
     node._x = mid - NODE_W / 2;
   }
+
   first(root);
-  place(root, 0, 0);
-  // Collect bbox
+  placeMgs(root, 0, 0);
+
+  // Third pass: find deepest MG bottom, then place every sub stack starting
+  // at a uniform subStartY (one subscription row below the deepest MG).
+  let maxMgBottom = 0;
+  (function scan(n) {
+    if (n.type !== TYPE.SUB) maxMgBottom = Math.max(maxMgBottom, n._y + NODE_H);
+    (n.children || []).forEach(scan);
+  })(root);
+  const subStartY = maxMgBottom + V_GAP;
+
+  (function placeSubs(node) {
+    const subs = subChildren(node);
+    let cy = subStartY;
+    for (const s of subs) {
+      s._w = NODE_W;
+      s._x = node._x;
+      s._y = cy;
+      s._h = estimateSubHeight(s.name);
+      cy += s._h + SUB_VGAP;
+    }
+    (node.children || []).forEach(placeSubs);
+  })(root);
+  // Collect bbox (subs may have variable height)
   let maxX = 0, maxY = 0;
   function visit(n) {
+    const h = (n.type === TYPE.SUB && n._h) ? n._h : NODE_H;
     maxX = Math.max(maxX, n._x + NODE_W);
-    maxY = Math.max(maxY, n._y + NODE_H);
+    maxY = Math.max(maxY, n._y + h);
     (n.children || []).forEach(visit);
   }
   visit(root);
@@ -1190,19 +1220,21 @@ function render() {
       lbl.style.top = (mgChildBox.y0 - 44 + PAD) + 'px';
       els.canvas.appendChild(lbl);
     }
-    if (subBox) {
+    // Single global yellow band wrapping all subscriptions.
+    const subBoxAll = bbox(state.root, n => n.type === TYPE.SUB);
+    if (subBoxAll) {
       const band = document.createElement('div');
       band.className = 'band sub';
-      band.style.left = (subBox.x0 - 12 + PAD) + 'px';
-      band.style.top = (subBox.y0 - 8 + PAD) + 'px';
-      band.style.width = (subBox.x1 - subBox.x0 + 24) + 'px';
-      band.style.height = (subBox.y1 - subBox.y0 + 16) + 'px';
+      band.style.left = (subBoxAll.x0 - 12 + PAD) + 'px';
+      band.style.top = (subBoxAll.y0 - 24 + PAD) + 'px';
+      band.style.width = (subBoxAll.x1 - subBoxAll.x0 + 24) + 'px';
+      band.style.height = (subBoxAll.y1 - subBoxAll.y0 + 36) + 'px';
       els.canvas.appendChild(band);
       const lbl = document.createElement('div');
       lbl.className = 'band-label';
       lbl.textContent = 'Subscriptions';
-      lbl.style.left = (subBox.x0 - 12 + PAD) + 'px';
-      lbl.style.top = (subBox.y1 + 8 + PAD) + 'px';
+      lbl.style.left = (subBoxAll.x0 - 12 + PAD) + 'px';
+      lbl.style.top = (subBoxAll.y0 - 44 + PAD) + 'px';
       els.canvas.appendChild(lbl);
     }
 
@@ -1252,8 +1284,9 @@ function bbox(root, predicate) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   function visit(n) {
     if (predicate(n)) {
+      const h = (n.type === TYPE.SUB && n._h) ? n._h : NODE_H;
       x0 = Math.min(x0, n._x); y0 = Math.min(y0, n._y);
-      x1 = Math.max(x1, n._x + NODE_W); y1 = Math.max(y1, n._y + NODE_H);
+      x1 = Math.max(x1, n._x + NODE_W); y1 = Math.max(y1, n._y + h);
     }
     (n.children || []).forEach(visit);
   }
@@ -1268,6 +1301,9 @@ function renderNode(node) {
   el.style.left = (node._x + PAD) + 'px';
   el.style.top = (node._y + PAD) + 'px';
   el.style.width = NODE_W + 'px';
+  if (node.type === TYPE.SUB && node._h) {
+    el.style.minHeight = node._h + 'px';
+  }
   el.dataset.id = node.id;
   el.dataset.kind = node.type === TYPE.SUB ? 'tree-sub' : (node.type === TYPE.ROOT ? 'root' : 'mg');
   el.draggable = node.type !== TYPE.ROOT;
@@ -1356,7 +1392,10 @@ function hideXrayTooltip() {
 
 function drawConnectors(node) {
   const NS = 'http://www.w3.org/2000/svg';
-  for (const c of (node.children || [])) {
+  const mgKids = (node.children || []).filter(c => c.type !== TYPE.SUB);
+  const subKids = (node.children || []).filter(c => c.type === TYPE.SUB);
+
+  for (const c of mgKids) {
     const x1 = node._x + NODE_W / 2 + PAD;
     const y1 = node._y + NODE_H + PAD;
     const x2 = c._x + NODE_W / 2 + PAD;
@@ -1369,6 +1408,19 @@ function drawConnectors(node) {
     path.setAttribute('fill', 'none');
     els.connectors.appendChild(path);
     drawConnectors(c);
+  }
+
+  // Single trunk from parent down to first sub of stack
+  if (subKids.length) {
+    const xm = node._x + NODE_W / 2 + PAD;
+    const y1 = node._y + NODE_H + PAD;
+    const y2 = subKids[0]._y + PAD;
+    const path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', `M ${xm} ${y1} L ${xm} ${y2}`);
+    path.setAttribute('stroke', '#8a8886');
+    path.setAttribute('stroke-width', '1');
+    path.setAttribute('fill', 'none');
+    els.connectors.appendChild(path);
   }
 }
 
@@ -2643,19 +2695,23 @@ function buildSvg() {
     visit(state.root, 0);
     return isFinite(x0) ? { x0, y0, x1, y1 } : null;
   })();
-  const subBox = bbox(state.root, n => n.type === TYPE.SUB);
   if (mgChildBox) {
     parts.push(`<rect x="${mgChildBox.x0 - 12 + PAD}" y="${mgChildBox.y0 - 24 + PAD}" width="${mgChildBox.x1 - mgChildBox.x0 + 24}" height="${mgChildBox.y1 - mgChildBox.y0 + 36}" fill="#eef6fc" rx="6"/>`);
     parts.push(`<text x="${mgChildBox.x0 - 8 + PAD}" y="${mgChildBox.y0 - 28 + PAD}" font-weight="600" fill="#605e5c">Management groups</text>`);
   }
-  if (subBox) {
-    parts.push(`<rect x="${subBox.x0 - 12 + PAD}" y="${subBox.y0 - 8 + PAD}" width="${subBox.x1 - subBox.x0 + 24}" height="${subBox.y1 - subBox.y0 + 16}" fill="#fff8e1" rx="6"/>`);
-    parts.push(`<text x="${subBox.x0 - 8 + PAD}" y="${subBox.y1 + 24 + PAD}" font-weight="600" fill="#605e5c">Subscriptions</text>`);
+
+  // Single global sub band
+  const subBoxAll = bbox(state.root, n => n.type === TYPE.SUB);
+  if (subBoxAll) {
+    parts.push(`<rect x="${subBoxAll.x0 - 12 + PAD}" y="${subBoxAll.y0 - 24 + PAD}" width="${subBoxAll.x1 - subBoxAll.x0 + 24}" height="${subBoxAll.y1 - subBoxAll.y0 + 36}" fill="#fff8e1" rx="6"/>`);
+    parts.push(`<text x="${subBoxAll.x0 - 8 + PAD}" y="${subBoxAll.y0 - 28 + PAD}" font-weight="600" fill="#605e5c">Subscriptions</text>`);
   }
 
-  // Connectors
+  // Connectors — same logic as canvas
   function drawSvgConnectors(node) {
-    for (const c of (node.children || [])) {
+    const mgKids = (node.children || []).filter(c => c.type !== TYPE.SUB);
+    const subKids = (node.children || []).filter(c => c.type === TYPE.SUB);
+    for (const c of mgKids) {
       const x1 = node._x + NODE_W / 2 + PAD;
       const y1 = node._y + NODE_H + PAD;
       const x2 = c._x + NODE_W / 2 + PAD;
@@ -2663,6 +2719,12 @@ function buildSvg() {
       const ym = y1 + (y2 - y1) / 2;
       parts.push(`<path d="M ${x1} ${y1} L ${x1} ${ym} L ${x2} ${ym} L ${x2} ${y2}" stroke="#8a8886" stroke-width="1" fill="none"/>`);
       drawSvgConnectors(c);
+    }
+    if (subKids.length) {
+      const xm = node._x + NODE_W / 2 + PAD;
+      const y1 = node._y + NODE_H + PAD;
+      const y2 = subKids[0]._y + PAD;
+      parts.push(`<path d="M ${xm} ${y1} L ${xm} ${y2}" stroke="#8a8886" stroke-width="1" fill="none"/>`);
     }
   }
   drawSvgConnectors(state.root);
