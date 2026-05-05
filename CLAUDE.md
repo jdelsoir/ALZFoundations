@@ -55,7 +55,9 @@ Rate limit (GitHub unauth, 60/hr/IP) handled with toast + manual-entry fallback 
 
 ## Import / export
 
-**Import** is one dialog (Browse, paste, or drop file) with auto-detection:
+**Import** is one dialog (Browse, paste, or drop file) with auto-detection. File picker accepts `.json/.tf/.hcl/.tfvars`.
+
+- `subscription_placement = {` token (HCL, not valid JSON) → AVM subs placement. Each entry parsed via regex (`(\w+) = { subscription_id = "…" management_group_name = "…" }`). Each sub is created with `name = key`, `subscriptionId = subscription_id`, then placed under the MG whose `id` (case-insensitive) or `display_name` matches `management_group_name`. Unmatched ones go to the pool. Toast reports placed/unplaced counts.
 - `management_groups[]` present → ALZ architecture definition (avm-ptn-alz). Builds tree from flat list using `parent_id` links. Tag/archetype/exists fields preserved on MGs. Subscriptions are not part of this format.
 - `root` present → native JSON model with full tree + pool round-trip.
 
@@ -66,6 +68,17 @@ Rate limit (GitHub unauth, 60/hr/IP) handled with toast + manual-entry fallback 
 - Terraform — `azurerm_management_group` + `azurerm_management_group_subscription_association`.
 - Mermaid `graph TD` + indented outline.
 - ALZ architecture definition — flat `management_groups[]`. Skips subscriptions (format has none) with a toast.
+- AVM subs placement (HCL) — `subscription_placement = { … }` block. Key = slugified sub name (lowercase, alphanumeric+underscore, deduped with numeric suffix). `subscription_id` from sub node (placeholder UUID + `# TODO` comment if unset). `management_group_name` = parent MG's `id`. Unplaced subs are listed as comments only.
+
+## Command palette
+
+`Ctrl/Cmd+K` (or `⌘K` toolbar button) opens fuzzy-search palette. Three sections in results:
+
+- **Management groups** — blue `mg` icon, breadcrumb path (`Contoso › Platform`). Selecting jumps + scrolls card into view, opens side panel.
+- **Subscriptions** — yellow `sub` (key) icon, breadcrumbs (or `unplaced pool`). Selecting opens side panel for that sub.
+- **Actions** — neutral icon. Includes Load reference architecture, New MG/Sub, Undo, Clear, Import, all Export targets.
+
+Scoring: substring match first (rank by position), then subsequence with word-boundary bonus. Match characters wrapped in `<mark>`. Arrow keys navigate, Enter runs, Esc closes. Ctrl+K works even from inside form fields (palette intentionally bypasses `inField` gate).
 
 ## Decisions worth knowing
 
@@ -77,14 +90,15 @@ Rate limit (GitHub unauth, 60/hr/IP) handled with toast + manual-entry fallback 
 
 ## Keyboard
 
-- Click node: select + open side panel. Click empty canvas: deselect.
+- Click node: select + open side panel. Click empty canvas: deselect **and close side panel**.
+- **Ctrl/Cmd+K** open command palette (works from form fields too).
 - **Ctrl/Cmd+C** copy selected node (deep, with subtree).
 - **Ctrl/Cmd+V** paste clone with fresh IDs under currently selected MG.
 - **Delete / Backspace** remove selected node + subtree (undoable).
 - **Ctrl/Cmd+Z** undo (covers every mutation).
-- **Esc** close panels + deselect.
+- **Esc** close panels, palette, modal + deselect.
 
-All shortcuts gated by `!inField` so they don't fire while typing in inputs.
+All shortcuts except `Ctrl/Cmd+K` are gated by `!inField` so they don't fire while typing in inputs.
 
 ## Out of scope (confirm before adding)
 

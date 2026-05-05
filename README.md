@@ -18,7 +18,13 @@ If you want a starting point instead of a blank canvas, click **Load reference a
 
 - **Design** an MG hierarchy visually with drag-and-drop. Subscriptions sit in a side pool until you place them under an MG.
 - **Pick archetypes** for each MG from the official [Azure Landing Zones Library](https://github.com/Azure/Azure-Landing-Zones-Library), fetched live from GitHub. Choose the library tag once per architecture (e.g. `platform/alz/2026.04.2`) and the archetype list updates accordingly.
-- **Import** existing designs from either the `avm-ptn-alz` Terraform module's `*.alz_architecture_definition.json` format or this app's native JSON. The dialog auto-detects which one you fed it.
+- **Find anything fast** with the command palette (<kbd>Ctrl/Cmd</kbd>+<kbd>K</kbd> or the <kbd>⌘K</kbd> toolbar button). Fuzzy-searches every management group and subscription by name, plus every toolbar action — results are grouped and icon-coded so MGs, subs, and actions are easy to tell apart. Picking a node jumps the canvas to it and opens the side panel.
+- **Import** existing designs from any of:
+  - the `avm-ptn-alz` Terraform module's `*.alz_architecture_definition.json` format,
+  - this app's native JSON,
+  - or an HCL `subscription_placement = { … }` block (handy for re-hydrating subscription IDs from your `terraform.tfvars`).
+
+  The dialog auto-detects which one you fed it. The file picker accepts `.json`, `.tf`, `.hcl`, and `.tfvars`.
 - **Export** the same tree to whichever format you need:
   - **SVG / PNG** — visual diagram for slides and docs.
   - **Native JSON** — round-trippable, includes the subscription pool.
@@ -26,20 +32,22 @@ If you want a starting point instead of a blank canvas, click **Load reference a
   - **Terraform** — `azurerm_management_group` + subscription association resources.
   - **Mermaid** — `graph TD` plus an indented text outline.
   - **ALZ architecture definition** — flat `management_groups[]` JSON for the `avm-ptn-alz` module.
+  - **AVM subs placement (HCL)** — `subscription_placement` block for the `avm-ptn-alz` module input. Each entry uses a slugified subscription name as its key, the stored UUID as `subscription_id`, and the parent MG's id as `management_group_name`.
 
 ## Keyboard
 
 | Shortcut | Action |
 |---|---|
 | Click node | Select + open side panel |
-| Click empty canvas | Deselect |
+| Click empty canvas | Deselect + close side panel |
+| <kbd>Ctrl/Cmd</kbd>+<kbd>K</kbd> | Open command palette (fuzzy search) |
 | <kbd>Ctrl/Cmd</kbd>+<kbd>C</kbd> | Copy selected node (with subtree) |
 | <kbd>Ctrl/Cmd</kbd>+<kbd>V</kbd> | Paste under currently selected MG (fresh IDs) |
 | <kbd>Delete</kbd> / <kbd>Backspace</kbd> | Remove selected node + subtree |
 | <kbd>Ctrl/Cmd</kbd>+<kbd>Z</kbd> | Undo |
-| <kbd>Esc</kbd> | Close panels + deselect |
+| <kbd>Esc</kbd> | Close panels, palette, modal + deselect |
 
-Shortcuts are disabled while you're typing in an input field.
+Shortcuts are disabled while you're typing in an input field — except <kbd>Ctrl/Cmd</kbd>+<kbd>K</kbd>, which always opens the palette.
 
 ## How it's built
 
