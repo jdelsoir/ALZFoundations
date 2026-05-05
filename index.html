@@ -93,11 +93,12 @@
   }
   .dropdown-menu button:hover { background: #f3f2f1; }
 
-  /* Main grid */
+  /* Main grid — pool floats over canvas, collapsed by default */
   .main {
     display: grid;
-    grid-template-columns: 1fr 280px;
+    grid-template-columns: 1fr;
     overflow: hidden;
+    position: relative;
   }
   .canvas-wrap {
     overflow: auto;
@@ -170,14 +171,24 @@
   }
   .node.subscription .glyph { color: #b58400; }
 
-  /* Pool */
+  /* Pool (collapsible right-side overlay) */
   .pool {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 280px;
     border-left: 1px solid var(--border);
     background: #fff;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    transform: translateX(100%);
+    transition: transform .2s ease;
+    z-index: 90;
+    box-shadow: -4px 0 12px rgba(0,0,0,.06);
   }
+  .pool.open { transform: translateX(0); }
   .pool h2 {
     font-size: 13px;
     font-weight: 600;
@@ -185,7 +196,44 @@
     padding: 12px 14px;
     border-bottom: 1px solid var(--border);
     color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
+  .pool h2 .close-x { padding: 0; line-height: 1; }
+  .pool-toggle {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 95;
+    background: #fff;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: var(--shadow);
+    transition: right .2s ease;
+  }
+  .pool.open ~ .pool-toggle { right: 292px; }
+  .pool-toggle:hover { background: #f3f2f1; }
+  .pool-toggle.drag-over-ok { background: var(--sub-card); border-color: var(--azure-blue); }
+  .pool-toggle .badge {
+    background: var(--sub-card);
+    border: 1px solid #e6c200;
+    color: #5b4500;
+    border-radius: 10px;
+    padding: 0 7px;
+    font-size: 11px;
+    font-weight: 600;
+    min-width: 18px;
+    text-align: center;
+  }
+  .pool-toggle .badge.zero { background: #f3f2f1; border-color: var(--border); color: var(--muted); }
   .pool-list {
     flex: 1;
     overflow: auto;
@@ -570,6 +618,82 @@
     font-size: 12px;
   }
   .xray-effective b { color: var(--azure-blue); font-size: 14px; }
+
+  ul.xray-list li[data-name] { cursor: help; }
+  ul.xray-list li[data-name]:hover { background: #fff8e1; }
+
+  .xray-item-popup {
+    position: fixed;
+    z-index: 700;
+    background: #fff;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    box-shadow: 0 8px 22px rgba(0,0,0,.18);
+    padding: 10px 12px;
+    width: 380px;
+    font-size: 12px;
+    max-height: 420px;
+    overflow: auto;
+    line-height: 1.4;
+  }
+  .xray-item-popup .xip-name {
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 11px;
+    word-break: break-all;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+  .xray-item-popup .xip-folder {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    margin-bottom: 8px;
+  }
+  .xray-item-popup .xip-fetch {
+    padding: 4px 10px;
+    font-size: 11px;
+    border: 1px solid var(--azure-blue);
+    background: var(--azure-blue);
+    color: #fff;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .xray-item-popup .xip-fetch:hover { background: var(--azure-blue-dark); }
+  .xray-item-popup .xip-body { margin-top: 10px; }
+  .xray-item-popup .xip-status { color: var(--muted); font-style: italic; font-size: 11px; }
+  .xray-item-popup .xip-row { margin-bottom: 8px; }
+  .xray-item-popup .xip-row b {
+    display: block;
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .xray-item-popup .xip-row code {
+    background: #f3f2f1;
+    padding: 1px 4px;
+    border-radius: 2px;
+    font-size: 11px;
+  }
+  .xray-item-popup .xip-effect-deny { color: var(--danger); font-weight: 600; }
+  .xray-item-popup .xip-effect-audit { color: #b58400; font-weight: 600; }
+  .xray-item-popup .xip-effect-deploy, .xray-item-popup .xip-effect-modify { color: #107c10; font-weight: 600; }
+  .xray-item-popup details.xip-raw { margin-top: 8px; }
+  .xray-item-popup details.xip-raw summary { cursor: pointer; font-size: 11px; color: var(--muted); }
+  .xray-item-popup details.xip-raw pre {
+    max-height: 240px;
+    overflow: auto;
+    font-size: 10px;
+    background: #f8f8f8;
+    padding: 8px;
+    border-radius: 3px;
+    margin: 6px 0 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
 </style>
 </head>
 <body>
@@ -618,14 +742,25 @@
       <div>or <b>+ Management group</b> to start from scratch.</div>
     </div>
   </div>
-  <aside class="pool">
-    <h2>Unplaced subscriptions</h2>
+  <aside class="pool" id="pool">
+    <h2>
+      <span>Unplaced subscriptions</span>
+      <button class="close-x" id="pool-close" title="Close (Esc)">×</button>
+    </h2>
     <div class="pool-list" id="pool-list"></div>
     <div class="pool-actions">
       <input id="new-sub-name" placeholder="New subscription name…" />
       <button class="btn" id="btn-add-sub-pool" style="width:100%">+ Add to pool</button>
     </div>
   </aside>
+  <button class="pool-toggle" id="pool-toggle" title="Open unplaced subscription pool">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <circle cx="5" cy="8" r="2.5" stroke="currentColor" stroke-width="1.4"/>
+      <path d="M7.5 8 L14 8 L14 10 L12.5 10 L12.5 11.5 L11 11.5 L11 10 L9 10" stroke="currentColor" stroke-width="1.4" fill="none"/>
+    </svg>
+    <span>Unplaced</span>
+    <span class="badge" id="pool-toggle-badge">0</span>
+  </button>
 </div>
 
 <aside class="side-panel" id="side-panel">
@@ -1086,7 +1221,7 @@ function render() {
   if (!state.pool.length) {
     const empty = document.createElement('div');
     empty.className = 'pool-empty';
-    empty.textContent = 'No unplaced subscriptions. Drag subscription cards here to un-place.';
+    empty.textContent = 'No unplaced subscriptions. Drag subscription cards onto the toggle button to un-place.';
     els.poolList.appendChild(empty);
   }
   for (const sub of state.pool) {
@@ -1100,6 +1235,13 @@ function render() {
     item.addEventListener('dragend', onDragEnd);
     item.addEventListener('click', () => openSidePanel(sub.id));
     els.poolList.appendChild(item);
+  }
+
+  // Toggle badge
+  const tb = document.getElementById('pool-toggle-badge');
+  if (tb) {
+    tb.textContent = String(state.pool.length);
+    tb.classList.toggle('zero', state.pool.length === 0);
   }
 
   // Async: fetch any missing archetype defs, then re-render so badges update
@@ -1311,6 +1453,29 @@ els.poolList.addEventListener('drop', (e) => {
   unplaceSubscription(dragInfo.id);
 });
 
+// Pool toggle button — open/close + drop target for un-place
+const poolEl = document.getElementById('pool');
+const poolToggleEl = document.getElementById('pool-toggle');
+const poolCloseEl = document.getElementById('pool-close');
+function openPool() { poolEl.classList.add('open'); }
+function closePool() { poolEl.classList.remove('open'); }
+function togglePool() { poolEl.classList.toggle('open'); }
+poolToggleEl.addEventListener('click', togglePool);
+poolCloseEl.addEventListener('click', closePool);
+poolToggleEl.addEventListener('dragover', (e) => {
+  if (!dragInfo || dragInfo.kind !== 'tree-sub') return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  poolToggleEl.classList.add('drag-over-ok');
+});
+poolToggleEl.addEventListener('dragleave', () => poolToggleEl.classList.remove('drag-over-ok'));
+poolToggleEl.addEventListener('drop', (e) => {
+  e.preventDefault();
+  poolToggleEl.classList.remove('drag-over-ok');
+  if (!dragInfo || dragInfo.kind !== 'tree-sub') return;
+  unplaceSubscription(dragInfo.id);
+});
+
 // =====================================================================
 // Side panel
 // =====================================================================
@@ -1411,26 +1576,180 @@ async function populateXray(node) {
   renderXrayPanel(node, def, arche, tag);
 }
 
+// =====================================================================
+// X-ray item popup — hover a list item, click "Fetch details"
+// =====================================================================
+
+const DETAIL_CACHE_PREFIX = 'alz-foundations:detail:';
+const FOLDER_EXT = {
+  policy_assignments:     'alz_policy_assignment',
+  policy_definitions:     'alz_policy_definition',
+  policy_set_definitions: 'alz_policy_set_definition',
+  role_assignments:       'alz_role_assignment',
+  role_definitions:       'alz_role_definition',
+};
+
+let xrayPopup = null;
+let xrayPopupTimer = null;
+let xrayPopupAnchor = null;
+
+function showXrayItemPopup(li) {
+  if (xrayPopupAnchor === li && xrayPopup) return;
+  hideXrayItemPopup(true);
+  xrayPopupAnchor = li;
+  const folder = li.dataset.folder;
+  const name = li.dataset.name;
+  const rect = li.getBoundingClientRect();
+  const pop = document.createElement('div');
+  pop.className = 'xray-item-popup';
+  pop.innerHTML = `
+    <div class="xip-name">${escapeHtml(name)}</div>
+    <div class="xip-folder">${escapeHtml(folder.replace(/_/g, ' '))}</div>
+    <button class="xip-fetch" type="button">Fetch details</button>
+    <div class="xip-body"></div>
+  `;
+  // Position to right of the side panel li, fall back to left if no room
+  const panelRect = sp.panel.getBoundingClientRect();
+  const popWidth = 380;
+  let left = panelRect.left - popWidth - 12;
+  if (left < 8) left = panelRect.left - popWidth - 8;
+  if (left < 8) left = 8;
+  pop.style.left = left + 'px';
+  pop.style.top = Math.min(rect.top, window.innerHeight - 440) + 'px';
+  document.body.appendChild(pop);
+  xrayPopup = pop;
+  pop.querySelector('.xip-fetch').onclick = () => fetchXrayDetails(folder, name, pop);
+  pop.addEventListener('mouseenter', () => clearTimeout(xrayPopupTimer));
+  pop.addEventListener('mouseleave', () => {
+    xrayPopupTimer = setTimeout(() => hideXrayItemPopup(), 200);
+  });
+  // Auto-fetch if cached already
+  const tag = state.meta.alzTag;
+  if (tag) {
+    const cached = readJsonLS(DETAIL_CACHE_PREFIX + tag + '||' + folder + '||' + name);
+    if (cached) renderDetailsInto(pop, cached, folder, name);
+  }
+}
+
+function hideXrayItemPopup(immediate = false) {
+  clearTimeout(xrayPopupTimer);
+  if (xrayPopup) {
+    xrayPopup.remove();
+    xrayPopup = null;
+    xrayPopupAnchor = null;
+  }
+}
+
+async function fetchXrayDetails(folder, name, pop) {
+  const tag = state.meta.alzTag;
+  if (!tag) return;
+  const body = pop.querySelector('.xip-body');
+  body.innerHTML = '<div class="xip-status">Loading…</div>';
+  const ext = FOLDER_EXT[folder];
+  if (!ext) { body.innerHTML = '<div class="xip-status">Unknown section</div>'; return; }
+  const cacheKey = DETAIL_CACHE_PREFIX + tag + '||' + folder + '||' + name;
+  let json = readJsonLS(cacheKey);
+  if (!json) {
+    const url = `https://raw.githubusercontent.com/${LIB_REPO}/${tag}/platform/alz/${folder}/${encodeURIComponent(name)}.${ext}.json`;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      json = await res.json();
+      writeJsonLS(cacheKey, json);
+    } catch (e) {
+      body.innerHTML = `<div class="xip-status">Fetch failed: ${escapeHtml(e.message)}</div>`;
+      return;
+    }
+  }
+  renderDetailsInto(pop, json, folder, name);
+}
+
+function renderDetailsInto(pop, json, folder, name) {
+  const body = pop.querySelector('.xip-body');
+  // Hide button after first successful render
+  const btn = pop.querySelector('.xip-fetch');
+  if (btn) btn.style.display = 'none';
+
+  const props = json.properties || {};
+  const dn = props.displayName || json.display_name || json.name || name;
+  const desc = props.description || json.description || '';
+
+  // Effect: a few possible locations
+  let effect = '';
+  if (props.parameters?.effect?.value) effect = props.parameters.effect.value;
+  else if (props.parameters?.effect?.defaultValue) effect = props.parameters.effect.defaultValue;
+  else if (props.policyRule?.then?.effect) effect = props.policyRule.then.effect;
+  else if (json.parameters?.effect?.value) effect = json.parameters.effect.value;
+
+  const role = json.role_definition_name || props.roleName || props.roleDefinitionId || '';
+  const policyDefId = props.policyDefinitionId || '';
+  const policySetDefId = props.policySetDefinitionId || '';
+
+  const effClass = effect
+    ? 'xip-effect-' + String(effect).toLowerCase().split(/\s/)[0].replace(/[^a-z]/g, '')
+    : '';
+
+  const rows = [];
+  if (dn && dn !== name)        rows.push(['Display name', escapeHtml(dn)]);
+  if (desc)                      rows.push(['Description', escapeHtml(desc)]);
+  if (effect)                    rows.push(['Effect', `<code class="${effClass}">${escapeHtml(effect)}</code>`]);
+  if (role)                      rows.push(['Role', `<code>${escapeHtml(role)}</code>`]);
+  if (policyDefId)               rows.push(['Policy definition', `<code>${escapeHtml(policyDefId)}</code>`]);
+  if (policySetDefId)            rows.push(['Policy set definition', `<code>${escapeHtml(policySetDefId)}</code>`]);
+
+  let html = '';
+  if (!rows.length) {
+    html += '<div class="xip-status">No standard fields recognised — see raw JSON below.</div>';
+  } else {
+    for (const [k, v] of rows) html += `<div class="xip-row"><b>${escapeHtml(k)}</b><div>${v}</div></div>`;
+  }
+  html += `<details class="xip-raw"><summary>Raw JSON</summary><pre>${escapeHtml(JSON.stringify(json, null, 2))}</pre></details>`;
+  body.innerHTML = html;
+}
+
+// Delegated hover on the side-panel x-ray
+(function bindXrayHover() {
+  const xray = document.getElementById('sp-xray');
+  if (!xray) return;
+  xray.addEventListener('mouseover', (e) => {
+    const li = e.target.closest('li[data-name][data-folder]');
+    if (!li) return;
+    clearTimeout(xrayPopupTimer);
+    xrayPopupTimer = setTimeout(() => showXrayItemPopup(li), 120);
+  });
+  xray.addEventListener('mouseout', (e) => {
+    const li = e.target.closest('li[data-name][data-folder]');
+    if (!li) return;
+    clearTimeout(xrayPopupTimer);
+    xrayPopupTimer = setTimeout(() => hideXrayItemPopup(), 250);
+  });
+})();
+
+// Hide popup when side panel closes or Esc
+sp.panel.addEventListener('transitionend', () => {
+  if (!sp.panel.classList.contains('open')) hideXrayItemPopup(true);
+});
+
 function renderXrayPanel(node, def, arche, tag) {
   const xray = document.getElementById('sp-xray');
   const sections = [
-    ['Policy assignments', def.policy_assignments],
-    ['Policy definitions', def.policy_definitions],
-    ['Policy set definitions', def.policy_set_definitions],
-    ['Role assignments', def.role_assignments],
-    ['Role definitions', def.role_definitions],
+    ['Policy assignments',     'policy_assignments',     def.policy_assignments],
+    ['Policy definitions',     'policy_definitions',     def.policy_definitions],
+    ['Policy set definitions', 'policy_set_definitions', def.policy_set_definitions],
+    ['Role assignments',       'role_assignments',       def.role_assignments],
+    ['Role definitions',       'role_definitions',       def.role_definitions],
   ];
   let html = `<div class="xray-section"><div class="xray-title">Archetype X-ray — ${escapeHtml(arche)} <span style="font-weight:400;color:var(--muted);">@ ${escapeHtml(tag.replace(/^platform\//, ''))}</span></div>`;
-  for (const [title, arr] of sections) {
+  for (const [title, folder, arr] of sections) {
     const list = Array.isArray(arr) ? arr : [];
     const open = title === 'Policy assignments' && list.length ? ' open' : '';
     html += `<details class="xray-group"${open}>`;
     html += `<summary>${escapeHtml(title)} <span class="count${list.length ? '' : ' zero'}">${list.length}</span></summary>`;
     if (list.length) {
-      html += '<ul class="xray-list">';
+      html += `<ul class="xray-list" data-folder="${folder}">`;
       for (const item of list) {
         const text = typeof item === 'string' ? item : JSON.stringify(item);
-        html += `<li>${escapeHtml(text)}</li>`;
+        html += `<li data-name="${escapeHtml(text)}" data-folder="${folder}">${escapeHtml(text)}</li>`;
       }
       html += '</ul>';
     }
